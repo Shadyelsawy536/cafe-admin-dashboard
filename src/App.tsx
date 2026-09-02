@@ -8,44 +8,18 @@ import { Categories } from './pages/Categories';
 import { ModifierGroups } from './pages/ModifierGroups';
 import { Products } from './pages/Products';
 import { Settings } from './pages/Settings';
+import { DeliveryZones } from './pages/DeliveryZones';
 
 function ProtectedShell() {
   const { user, roleName, loading } = useAuth();
-
-  if (loading) {
-    return <div className="flex h-screen items-center justify-center text-sm text-ink/50">Loading…</div>;
-  }
+  if (loading) return <div className="flex h-screen items-center justify-center text-sm text-ink/50">Loading…</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (!roleName) {
-    return (
-      <div className="flex h-screen items-center justify-center px-6 text-center">
-        <div>
-          <p className="text-lg font-semibold text-ink">No staff access</p>
-          <p className="mt-2 text-sm text-ink/60">This account isn't linked to a restaurant yet. Contact your platform admin.</p>
-        </div>
-      </div>
-    );
-  }
+  if (!roleName) return <div className="flex h-screen items-center justify-center px-6 text-center"><div><p className="text-lg font-semibold text-ink">No staff access</p><p className="mt-2 text-sm text-ink/60">This account isn't linked to a restaurant yet. Contact your platform admin.</p></div></div>;
   return <Layout />;
 }
 
 export default function App() {
-  return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route element={<ProtectedShell />}>
-            <Route path="/" element={<Overview />} />
-            <Route path="/orders" element={<Orders />} />
-            <Route path="/categories" element={<Categories />} />
-            <Route path="/modifier-groups" element={<ModifierGroups />} />
-            <Route path="/products" element={<Products />} />
-            <Route path="/settings" element={<Settings />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
-  );
+  return <AuthProvider><BrowserRouter><Routes><Route path="/login" element={<Login />} /><Route element={<ProtectedShell />}>
+    <Route path="/" element={<Overview />} /><Route path="/orders" element={<Orders />} /><Route path="/products" element={<Products />} /><Route path="/categories" element={<Categories />} /><Route path="/modifier-groups" element={<ModifierGroups />} /><Route path="/settings" element={<Settings />} /><Route path="/delivery-zones" element={<DeliveryZones />} />
+  </Route><Route path="*" element={<Navigate to="/" replace />} /></Routes></BrowserRouter></AuthProvider>;
 }
