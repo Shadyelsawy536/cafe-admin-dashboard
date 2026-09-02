@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Polygon, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import type { LatLngExpression, LeafletMouseEvent } from 'leaflet';
+import type { LatLngExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from '../lib/supabase';
 import { RESTAURANT_ID } from '../lib/tenant';
@@ -10,7 +10,7 @@ type Zone = { id:string; name:string; delivery_fee:number; min_order_amount:numb
 type Point = [number, number];
 const cairo:Point=[30.0444,31.2357];
 const input='mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent';
-const pointIcon=L.divIcon({className:'zone-point-handle',html:'<span></span>',iconSize:[18,18],iconAnchor:[9,9]});
+const pointIcon=L.divIcon({className:'zone-point-handle',html:'<span style="display:block;width:18px;height:18px;border-radius:9999px;background:var(--accent,#111827);border:3px solid white;box-shadow:0 1px 5px rgba(0,0,0,.35);cursor:grab"></span>',iconSize:[18,18],iconAnchor:[9,9]});
 
 export default function DeliveryZones(){
  const [zones,setZones]=useState<Zone[]>([]),[loading,setLoading]=useState(true),[draft,setDraft]=useState<Zone|null>(null),[points,setPoints]=useState<Point[]>([]),[drawing,setDrawing]=useState(false),[message,setMessage]=useState<string|null>(null),[search,setSearch]=useState('');
@@ -29,4 +29,4 @@ export default function DeliveryZones(){
 }
 function MapClick({drawing,onPoint}:{drawing:boolean;onPoint:(p:Point)=>void}){useMapEvents({click:e=>{if(drawing)onPoint([e.latlng.lat,e.latlng.lng])}});return null}
 function MapSearch(){const map=useMap();useEffect(()=>{const handler=(e:Event)=>{const q=(e as CustomEvent<string>).detail;fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`,{headers:{Accept:'application/json'}}).then(r=>r.json()).then((data:any[])=>{if(!data.length){window.alert('Location not found. Try a more specific area name.');return}const x=data[0];map.flyTo([Number(x.lat),Number(x.lon)],14,{duration:1.2})}).catch(()=>window.alert('Could not search the map right now.'))};window.addEventListener('delivery-zone-map-search',handler);return()=>window.removeEventListener('delivery-zone-map-search',handler)},[map]);return null}
-function DraggablePoint({point,onMove}:{point:Point;onMove:(p:Point)=>void}){const map=useMap();const [dragging,setDragging]=useState(false);const latest=useRef(point);latest.current=point;return <Marker position={point as LatLngExpression} icon={pointIcon} draggable eventHandlers={{dragstart:()=>setDragging(true),drag:(e:LeafletMouseEvent)=>{const m=e.target as L.Marker;const ll=m.getLatLng();onMove([ll.lat,ll.lng])},dragend:()=>{setDragging(false);map.dragging.enable()}}} opacity={dragging?0.9:1}/>}
+function DraggablePoint({point,onMove}:{point:Point;onMove:(p:Point)=>void}){return <Marker position={point as LatLngExpression} icon={pointIcon} draggable eventHandlers={{drag:(e)=>{const marker=e.target as L.Marker;const ll=marker.getLatLng();onMove([ll.lat,ll.lng])}}}/>}
