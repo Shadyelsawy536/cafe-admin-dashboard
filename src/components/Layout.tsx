@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { to: '/products', label: 'Products', icon: '☕' },
   { to: '/categories', label: 'Categories', icon: '▦' },
   { to: '/modifier-groups', label: 'Modifier Groups', icon: '✦' },
+  { to: '/settings', label: 'Settings', icon: '⚙' },
 ];
 
 export function Layout() {
