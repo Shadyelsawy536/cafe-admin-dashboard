@@ -7,6 +7,7 @@ import { Orders } from './pages/Orders';
 import { Categories } from './pages/Categories';
 import { ModifierGroups } from './pages/ModifierGroups';
 import { Products } from './pages/Products';
+import { Settings } from './pages/Settings';
 
 function ProtectedShell() {
   const { user, roleName, loading } = useAuth();
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="/categories" element={<Categories />} />
             <Route path="/modifier-groups" element={<ModifierGroups />} />
             <Route path="/products" element={<Products />} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
