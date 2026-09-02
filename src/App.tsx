@@ -8,7 +8,7 @@ import { Categories } from './pages/Categories';
 import { ModifierGroups } from './pages/ModifierGroups';
 import { Products } from './pages/Products';
 import { Settings } from './pages/Settings';
-import { DeliveryZones } from './pages/DeliveryZones';
+import DeliveryZones from './pages/DeliveryZones';
 
 function ProtectedShell() {
   const { user, roleName, loading } = useAuth();
