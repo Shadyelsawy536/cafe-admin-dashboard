@@ -3,449 +3,75 @@ import { ImageUpload } from '../components/ImageUpload';
 import { supabase } from '../lib/supabase';
 import { RESTAURANT_ID } from '../lib/tenant';
 
-interface Restaurant {
-  id: string;
-  name: string;
-  description: string | null;
-  logo_url: string | null;
-  cover_image_url: string | null;
-  phone: string | null;
-  email: string | null;
-  address: string | null;
+type Status = 'open' | 'closed' | 'temporarily_closed';
+interface Restaurant { id:string; name:string; description:string|null; logo_url:string|null; cover_image_url:string|null; phone:string|null; email:string|null; address:string|null }
+interface Branding { restaurant_id:string; primary_color:string; secondary_color:string; background_color:string; font_family:string|null; logo_url:string|null; cover_url:string|null; customer_primary_color:string; customer_secondary_color:string; customer_background_color:string; customer_logo_url:string|null; customer_cover_url:string|null; dashboard_primary_color:string; dashboard_secondary_color:string; dashboard_background_color:string }
+interface SettingsRow { restaurant_id:string; currency:string; timezone:string; order_number_prefix:string|null; min_order_amount:number|null; tax_rate:number; accepts_delivery:boolean; accepts_pickup:boolean; preparation_time_minutes:number; accepts_scheduled_orders:boolean; scheduled_order_max_days:number; customer_notes_enabled:boolean; operational_status:Status; closure_message:string|null }
+interface Location { id:string; name:string; map_url:string|null; latitude:number|null; longitude:number|null; is_primary:boolean; is_active:boolean; sort_order:number }
+interface Social { id:string; platform:string; label:string|null; url:string; is_active:boolean; sort_order:number }
+interface Hours { id:string; day_of_week:number; is_closed:boolean; open_time:string|null; close_time:string|null; break_start:string|null; break_end:string|null }
+interface Rules { restaurant_id:string; customer_cancellation_enabled:boolean; cancellation_window_minutes:number; auto_cancel_unpaid_minutes:number; require_customer_phone:boolean; require_delivery_address:boolean; allow_customer_order_notes:boolean; max_items_per_order:number }
+interface Notifications { restaurant_id:string; new_order_push:boolean; new_order_email:boolean; order_status_push:boolean; promotional_push:boolean; low_stock_push:boolean; admin_email:string|null }
+interface Provider { id:string; name:string; slug:string; is_active:boolean }
+interface PaymentConfig { id:string; payment_provider_id:string; is_active:boolean }
+const input='mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent';
+const label='block text-xs font-medium uppercase tracking-wide text-ink/50';
+const card='mt-6 rounded-2xl border border-line bg-surface p-6';
+const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+export function Settings(){
+ const [restaurant,setRestaurant]=useState<Restaurant|null>(null),[branding,setBranding]=useState<Branding|null>(null),[settings,setSettings]=useState<SettingsRow|null>(null),[locations,setLocations]=useState<Location[]>([]),[socials,setSocials]=useState<Social[]>([]),[hours,setHours]=useState<Hours[]>([]),[rules,setRules]=useState<Rules|null>(null),[notifications,setNotifications]=useState<Notifications|null>(null),[providers,setProviders]=useState<Provider[]>([]),[paymentConfigs,setPaymentConfigs]=useState<PaymentConfig[]>([]);
+ const [loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[message,setMessage]=useState<string|null>(null),[location,setLocation]=useState<Location|null>(null),[social,setSocial]=useState<Social|null>(null),[credentialStatus,setCredentialStatus]=useState<Record<string,boolean>>({});
+ const load=useCallback(async()=>{setLoading(true);const [r,b,s,l,so,h,ru,n,p,pc]=await Promise.all([
+  supabase.from('restaurants').select('id,name,description,logo_url,cover_image_url,phone,email,address').eq('id',RESTAURANT_ID).maybeSingle(),
+  supabase.from('restaurant_branding').select('*').eq('restaurant_id',RESTAURANT_ID).maybeSingle(),
+  supabase.from('restaurant_settings').select('*').eq('restaurant_id',RESTAURANT_ID).maybeSingle(),
+  supabase.from('restaurant_locations').select('*').eq('restaurant_id',RESTAURANT_ID).order('sort_order'),
+  supabase.from('restaurant_social_links').select('*').eq('restaurant_id',RESTAURANT_ID).order('sort_order'),
+  supabase.from('restaurant_business_hours').select('*').eq('restaurant_id',RESTAURANT_ID).order('day_of_week'),
+  supabase.from('restaurant_order_rules').select('*').eq('restaurant_id',RESTAURANT_ID).maybeSingle(),
+  supabase.from('restaurant_notification_settings').select('*').eq('restaurant_id',RESTAURANT_ID).maybeSingle(),
+  supabase.from('payment_providers').select('id,name,slug,is_active').eq('is_active',true).order('name'),
+  supabase.from('restaurant_payment_configs').select('id,payment_provider_id,is_active').eq('restaurant_id',RESTAURANT_ID)]);
+  [r,b,s,l,so,h,ru,n,p,pc].forEach(x=>x.error&&console.error(x.error));setRestaurant(r.data);setBranding(b.data);setSettings(s.data);setLocations(l.data||[]);setSocials(so.data||[]);setHours(h.data||[]);setRules(ru.data);setNotifications(n.data);setProviders(p.data||[]);setPaymentConfigs(pc.data||[]);setLoading(false)},[]);
+ useEffect(()=>{load()},[load]);
+ const patch=(setter:any,key:string,value:any)=>setter((v:any)=>v?{...v,[key]:value}:v);
+ async function save(){if(!restaurant||!branding||!settings||!rules||!notifications)return;setSaving(true);setMessage(null);const rs=await Promise.all([
+  supabase.from('restaurants').update({name:restaurant.name.trim(),description:restaurant.description?.trim()||null,logo_url:restaurant.logo_url||null,cover_image_url:restaurant.cover_image_url||null,phone:restaurant.phone?.trim()||null,email:restaurant.email?.trim()||null,address:restaurant.address?.trim()||null}).eq('id',RESTAURANT_ID),
+  supabase.from('restaurant_branding').upsert({restaurant_id:RESTAURANT_ID,primary_color:branding.customer_primary_color,secondary_color:branding.customer_secondary_color,background_color:branding.customer_background_color,font_family:branding.font_family||null,logo_url:branding.customer_logo_url||null,cover_url:branding.customer_cover_url||null,customer_primary_color:branding.customer_primary_color,customer_secondary_color:branding.customer_secondary_color,customer_background_color:branding.customer_background_color,customer_logo_url:branding.customer_logo_url||null,customer_cover_url:branding.customer_cover_url||null,dashboard_primary_color:branding.dashboard_primary_color,dashboard_secondary_color:branding.dashboard_secondary_color,dashboard_background_color:branding.dashboard_background_color},{onConflict:'restaurant_id'}),
+  supabase.from('restaurant_settings').upsert({...settings,restaurant_id:RESTAURANT_ID,min_order_amount:Number(settings.min_order_amount)||0,tax_rate:Number(settings.tax_rate)||0,preparation_time_minutes:Number(settings.preparation_time_minutes)||20,scheduled_order_max_days:Number(settings.scheduled_order_max_days)||7},{onConflict:'restaurant_id'}),
+  supabase.from('restaurant_order_rules').upsert({...rules,restaurant_id:RESTAURANT_ID,cancellation_window_minutes:Number(rules.cancellation_window_minutes)||0,auto_cancel_unpaid_minutes:Number(rules.auto_cancel_unpaid_minutes)||0,max_items_per_order:Number(rules.max_items_per_order)||1},{onConflict:'restaurant_id'}),
+  supabase.from('restaurant_notification_settings').upsert({...notifications,restaurant_id:RESTAURANT_ID,admin_email:notifications.admin_email?.trim()||null},{onConflict:'restaurant_id'})]);const err=rs.find(x=>x.error)?.error;setSaving(false);setMessage(err?err.message:'Settings saved successfully.')}
+ async function saveLocation(){if(!location?.name.trim())return;const payload={restaurant_id:RESTAURANT_ID,name:location.name.trim(),map_url:location.map_url?.trim()||null,latitude:location.latitude,longitude:location.longitude,is_primary:location.is_primary,is_active:location.is_active,sort_order:location.sort_order};const r=location.id?await supabase.from('restaurant_locations').update(payload).eq('id',location.id):await supabase.from('restaurant_locations').insert(payload);if(r.error){setMessage(r.error.message);return}setLocation(null);load()}
+ async function saveSocial(){if(!social?.platform.trim()||!social.url.trim())return;const payload={restaurant_id:RESTAURANT_ID,platform:social.platform.trim().toLowerCase(),label:social.label?.trim()||null,url:social.url.trim(),is_active:social.is_active,sort_order:social.sort_order};const r=social.id?await supabase.from('restaurant_social_links').update(payload).eq('id',social.id):await supabase.from('restaurant_social_links').insert(payload);if(r.error){setMessage(r.error.message);return}setSocial(null);load()}
+ async function hour(day:number,data:Partial<Hours>){const h=hours.find(x=>x.day_of_week===day);if(!h)return;const r=await supabase.from('restaurant_business_hours').update(data).eq('id',h.id);if(r.error)setMessage(r.error.message);else setHours(x=>x.map(v=>v.id===h.id?{...v,...data}:v))}
+ async function payment(id:string,on:boolean){const c=paymentConfigs.find(x=>x.payment_provider_id===id);if(c)await supabase.from('restaurant_payment_configs').update({is_active:on}).eq('id',c.id);else await supabase.from('restaurant_payment_configs').insert({restaurant_id:RESTAURANT_ID,payment_provider_id:id,is_active:on});load()}
+ async function checkProvider(p:Provider){const {data,error}=await supabase.functions.invoke('payment-settings',{body:{action:'status',restaurantId:RESTAURANT_ID,providerId:p.id}});if(error)setMessage(error.message);else setCredentialStatus(v=>({...v,[p.id]:Boolean(data?.configured)}))}
+ if(loading)return <div className="p-8 text-sm text-ink/50">Loading settings…</div>;if(!restaurant||!branding||!settings||!rules||!notifications)return <div className="p-8 text-sm text-danger">Restaurant settings could not be loaded.</div>;
+ return <div className="max-w-7xl p-8 pb-16"><header className="flex flex-wrap items-center justify-between gap-4"><div><h1 className="font-display text-2xl font-semibold">Settings</h1><p className="mt-1 text-sm text-ink/60">Manage the restaurant configuration used by the customer experience.</p></div><button onClick={save} disabled={saving} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving?'Saving…':'Save Changes'}</button></header>{message&&<div className="mt-4 rounded-lg border border-line bg-surface px-4 py-3 text-sm">{message}</div>}
+ <section className={card}><Title t="Restaurant Info" d="Basic information, customer locations and social links."/><div className="mt-5 grid gap-4 md:grid-cols-2"><F l="Name"><input className={input} value={restaurant.name} onChange={e=>patch(setRestaurant,'name',e.target.value)}/></F><F l="Phone"><input className={input} value={restaurant.phone||''} onChange={e=>patch(setRestaurant,'phone',e.target.value)}/></F><F l="Email"><input className={input} type="email" value={restaurant.email||''} onChange={e=>patch(setRestaurant,'email',e.target.value)}/></F><F l="Address"><input className={input} value={restaurant.address||''} onChange={e=>patch(setRestaurant,'address',e.target.value)}/></F><F l="Description" wide><textarea rows={3} className={input} value={restaurant.description||''} onChange={e=>patch(setRestaurant,'description',e.target.value)}/></F><F l="Logo"><ImageUpload value={restaurant.logo_url||''} onChange={v=>patch(setRestaurant,'logo_url',v||null)}/></F><F l="Cover"><ImageUpload value={restaurant.cover_image_url||''} onChange={v=>patch(setRestaurant,'cover_image_url',v||null)}/></F></div>
+ <Sub title="Locations" action="Add Location" onClick={()=>setLocation({id:'',name:'',map_url:'',latitude:null,longitude:null,is_primary:locations.length===0,is_active:true,sort_order:locations.length})}/>{locations.map(x=><Row key={x.id} title={`${x.name}${x.is_primary?' · Primary':''}`} text={x.map_url||'No map URL'} edit={()=>setLocation(x)} del={async()=>{await supabase.from('restaurant_locations').delete().eq('id',x.id);load()}}/>)}
+ <Sub title="Social Media Links" action="Add Social Link" onClick={()=>setSocial({id:'',platform:'instagram',label:'Instagram',url:'',is_active:true,sort_order:socials.length})}/>{socials.map(x=><Row key={x.id} title={x.label||x.platform} text={x.url} edit={()=>setSocial(x)} del={async()=>{await supabase.from('restaurant_social_links').delete().eq('id',x.id);load()}}/>)}
+ </section>
+ {location&&<Modal title={location.id?'Edit Location':'Add Location'} close={()=>setLocation(null)} save={saveLocation}><F l="Name"><input className={input} value={location.name} onChange={e=>setLocation({...location,name:e.target.value})}/></F><F l="Map URL"><input className={input} placeholder="https://maps.google.com/..." value={location.map_url||''} onChange={e=>setLocation({...location,map_url:e.target.value})}/></F><div className="mt-3 grid grid-cols-2 gap-3"><F l="Latitude"><input type="number" step="any" className={input} value={location.latitude??''} onChange={e=>setLocation({...location,latitude:e.target.value===''?null:Number(e.target.value)})}/></F><F l="Longitude"><input type="number" step="any" className={input} value={location.longitude??''} onChange={e=>setLocation({...location,longitude:e.target.value===''?null:Number(e.target.value)})}/></F></div><div className="mt-4"><Toggle l="Primary" v={location.is_primary} c={v=>setLocation({...location,is_primary:v})}/><Toggle l="Visible" v={location.is_active} c={v=>setLocation({...location,is_active:v})}/></div></Modal>}
+ {social&&<Modal title={social.id?'Edit Social Link':'Add Social Link'} close={()=>setSocial(null)} save={saveSocial}><F l="Platform"><input className={input} placeholder="instagram / facebook / tiktok / x" value={social.platform} onChange={e=>setSocial({...social,platform:e.target.value})}/></F><F l="Display Label"><input className={input} value={social.label||''} onChange={e=>setSocial({...social,label:e.target.value})}/></F><F l="URL"><input type="url" className={input} placeholder="https://..." value={social.url} onChange={e=>setSocial({...social,url:e.target.value})}/></F><Toggle l="Visible" v={social.is_active} c={v=>setSocial({...social,is_active:v})}/></Modal>}
+
+ <section className={card}><Title t="Restaurant Branding" d="Customer App and Admin Dashboard have separate color themes."/><div className="mt-5 grid gap-5 lg:grid-cols-2"><Brand title="Customer App" keys={['customer_primary_color','customer_secondary_color','customer_background_color']} b={branding} set={setBranding}/><Brand title="Admin Dashboard" keys={['dashboard_primary_color','dashboard_secondary_color','dashboard_background_color']} b={branding} set={setBranding}/></div><div className="mt-5 max-w-md"><F l="Font Family"><input className={input} value={branding.font_family||''} onChange={e=>patch(setBranding,'font_family',e.target.value)}/></F></div><div className="mt-5 grid gap-4 md:grid-cols-2"><F l="Customer Logo"><ImageUpload value={branding.customer_logo_url||''} onChange={v=>patch(setBranding,'customer_logo_url',v||null)}/></F><F l="Customer Cover"><ImageUpload value={branding.customer_cover_url||''} onChange={v=>patch(setBranding,'customer_cover_url',v||null)}/></F></div></section>
+ <section className={card}><Title t="Pricing & Ordering" d="Pricing, preparation time and scheduled orders."/><div className="mt-5 grid gap-4 md:grid-cols-3"><F l="Currency"><input className={input} value={settings.currency} onChange={e=>patch(setSettings,'currency',e.target.value)}/></F><F l="Tax Rate (%)"><input type="number" min="0" step="0.01" className={input} value={settings.tax_rate} onChange={e=>patch(setSettings,'tax_rate',Number(e.target.value))}/></F><F l="Minimum Order"><input type="number" min="0" className={input} value={settings.min_order_amount??0} onChange={e=>patch(setSettings,'min_order_amount',Number(e.target.value))}/></F><F l="Timezone"><input className={input} value={settings.timezone} onChange={e=>patch(setSettings,'timezone',e.target.value)}/></F><F l="Order Prefix"><input className={input} value={settings.order_number_prefix||''} onChange={e=>patch(setSettings,'order_number_prefix',e.target.value)}/></F><F l="Preparation Time (minutes)"><input type="number" min="1" className={input} value={settings.preparation_time_minutes} onChange={e=>patch(setSettings,'preparation_time_minutes',Number(e.target.value))}/></F></div><div className="mt-5 grid gap-4 md:grid-cols-3"><Toggle l="Accept delivery" v={settings.accepts_delivery} c={v=>patch(setSettings,'accepts_delivery',v)}/><Toggle l="Accept pickup" v={settings.accepts_pickup} c={v=>patch(setSettings,'accepts_pickup',v)}/><Toggle l="Customer notes" v={settings.customer_notes_enabled} c={v=>patch(setSettings,'customer_notes_enabled',v)}/><Toggle l="Scheduled orders" v={settings.accepts_scheduled_orders} c={v=>patch(setSettings,'accepts_scheduled_orders',v)}/>{settings.accepts_scheduled_orders&&<F l="Max scheduled days"><input type="number" min="1" max="90" className={input} value={settings.scheduled_order_max_days} onChange={e=>patch(setSettings,'scheduled_order_max_days',Number(e.target.value))}/></F>}</div></section>
+
+ <section className={card}><Title t="Business Hours" d="Seven-day schedule with optional breaks."/><div className="mt-5 space-y-3">{days.map((d,i)=>{const h=hours.find(x=>x.day_of_week===i);if(!h)return null;return <div key={d} className="grid gap-3 rounded-xl border border-line bg-canvas p-4 md:grid-cols-[120px_90px_repeat(4,minmax(0,1fr))] md:items-end"><strong>{d}</strong><Toggle l="Closed" v={h.is_closed} c={v=>hour(i,{is_closed:v})}/><F l="Open"><input type="time" disabled={h.is_closed} className={input} value={h.open_time||''} onChange={e=>hour(i,{open_time:e.target.value})}/></F><F l="Close"><input type="time" disabled={h.is_closed} className={input} value={h.close_time||''} onChange={e=>hour(i,{close_time:e.target.value})}/></F><F l="Break Start"><input type="time" disabled={h.is_closed} className={input} value={h.break_start||''} onChange={e=>hour(i,{break_start:e.target.value})}/></F><F l="Break End"><input type="time" disabled={h.is_closed} className={input} value={h.break_end||''} onChange={e=>hour(i,{break_end:e.target.value})}/></F></div>})}</div></section>
+ <section className={card}><div className="flex items-center justify-between gap-4"><Title t="Delivery Zones" d="Each zone has its own fee and polygon boundary."/><a href="/delivery-zones" className="rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white">Open Delivery Zones</a></div></section>
+
+ <section className={card}><Title t="Order Rules" d="Checkout restrictions and cancellation policy."/><div className="mt-5 grid gap-4 md:grid-cols-2"><Toggle l="Allow customer cancellation" v={rules.customer_cancellation_enabled} c={v=>patch(setRules,'customer_cancellation_enabled',v)}/>{rules.customer_cancellation_enabled&&<F l="Cancellation window (minutes)"><input type="number" min="0" className={input} value={rules.cancellation_window_minutes} onChange={e=>patch(setRules,'cancellation_window_minutes',Number(e.target.value))}/></F>}<F l="Auto-cancel unpaid (minutes)"><input type="number" min="0" className={input} value={rules.auto_cancel_unpaid_minutes} onChange={e=>patch(setRules,'auto_cancel_unpaid_minutes',Number(e.target.value))}/></F><F l="Max items per order"><input type="number" min="1" max="500" className={input} value={rules.max_items_per_order} onChange={e=>patch(setRules,'max_items_per_order',Number(e.target.value))}/></F><Toggle l="Require customer phone" v={rules.require_customer_phone} c={v=>patch(setRules,'require_customer_phone',v)}/><Toggle l="Require delivery address" v={rules.require_delivery_address} c={v=>patch(setRules,'require_delivery_address',v)}/><Toggle l="Allow order notes" v={rules.allow_customer_order_notes} c={v=>patch(setRules,'allow_customer_order_notes',v)}/></div></section>
+ <section className={card}><Title t="Notifications" d="Push and email notification preferences."/><div className="mt-5 grid gap-4 md:grid-cols-2"><Toggle l="New order push" v={notifications.new_order_push} c={v=>patch(setNotifications,'new_order_push',v)}/><Toggle l="New order email" v={notifications.new_order_email} c={v=>patch(setNotifications,'new_order_email',v)}/><Toggle l="Order status push" v={notifications.order_status_push} c={v=>patch(setNotifications,'order_status_push',v)}/><Toggle l="Promotional push" v={notifications.promotional_push} c={v=>patch(setNotifications,'promotional_push',v)}/><Toggle l="Low stock push" v={notifications.low_stock_push} c={v=>patch(setNotifications,'low_stock_push',v)}/><F l="Admin email"><input type="email" className={input} value={notifications.admin_email||''} onChange={e=>patch(setNotifications,'admin_email',e.target.value)}/></F></div></section>
+ <section className={card}><Title t="Restaurant Status" d="Operational status is separate from the platform subscription status."/><div className="mt-5 grid gap-4 md:grid-cols-2"><F l="Status"><select className={input} value={settings.operational_status} onChange={e=>patch(setSettings,'operational_status',e.target.value as Status)}><option value="open">Open</option><option value="closed">Closed</option><option value="temporarily_closed">Temporarily Closed</option></select></F><F l="Closure Message"><input className={input} value={settings.closure_message||''} placeholder="We're temporarily closed…" onChange={e=>patch(setSettings,'closure_message',e.target.value)}/></F></div></section>
+ <section className={card}><Title t="Payment Providers" d="Credentials are never returned to the browser; status is checked through the Edge Function."/>{providers.length===0?<p className="mt-4 text-sm text-ink/50">No active payment providers are configured on the platform yet.</p>:<div className="mt-4 space-y-3">{providers.map(p=>{const on=paymentConfigs.some(x=>x.payment_provider_id===p.id&&x.is_active);return <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-canvas p-4"><div><p className="font-medium">{p.name}</p><p className="text-xs text-ink/50">{p.slug} · {credentialStatus[p.id]?'Credentials configured':'Status not checked'}</p></div><div className="flex items-center gap-4"><button onClick={()=>checkProvider(p)} className="rounded-lg border border-line px-3 py-2 text-xs">Check Credentials</button><Toggle l={on?'Enabled':'Disabled'} v={on} c={v=>payment(p.id,v)}/></div></div>})}</div>}</section>
+ </div>
 }
-
-interface Branding {
-  restaurant_id: string;
-  primary_color: string;
-  secondary_color: string;
-  background_color: string;
-  font_family: string | null;
-  logo_url: string | null;
-  cover_url: string | null;
-}
-
-interface RestaurantSettingsRow {
-  restaurant_id: string;
-  currency: string;
-  timezone: string;
-  order_number_prefix: string | null;
-  min_order_amount: number | null;
-  tax_rate: number;
-  accepts_delivery: boolean;
-  accepts_pickup: boolean;
-}
-
-interface DeliveryZone {
-  id: string;
-  name: string;
-  delivery_fee: number;
-  min_order_amount: number;
-  is_active: boolean;
-}
-
-interface PaymentProvider {
-  id: string;
-  name: string;
-  slug: string;
-  is_active: boolean;
-}
-
-interface PaymentConfig {
-  id: string;
-  payment_provider_id: string;
-  is_active: boolean;
-}
-
-const inputClass =
-  'mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent';
-const labelClass = 'block text-xs font-medium uppercase tracking-wide text-ink/50';
-
-export function Settings() {
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
-  const [branding, setBranding] = useState<Branding | null>(null);
-  const [settings, setSettings] = useState<RestaurantSettingsRow | null>(null);
-  const [zones, setZones] = useState<DeliveryZone[]>([]);
-  const [providers, setProviders] = useState<PaymentProvider[]>([]);
-  const [paymentConfigs, setPaymentConfigs] = useState<PaymentConfig[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [zoneDraft, setZoneDraft] = useState<DeliveryZone | 'new' | null>(null);
-  const [zoneName, setZoneName] = useState('');
-  const [zoneFee, setZoneFee] = useState(0);
-  const [zoneMinOrder, setZoneMinOrder] = useState(0);
-  const [zoneActive, setZoneActive] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const [restaurantRes, brandingRes, settingsRes, zonesRes, providersRes, configsRes] = await Promise.all([
-      supabase
-        .from('restaurants')
-        .select('id, name, description, logo_url, cover_image_url, phone, email, address')
-        .eq('id', RESTAURANT_ID)
-        .maybeSingle(),
-      supabase
-        .from('restaurant_branding')
-        .select('restaurant_id, primary_color, secondary_color, background_color, font_family, logo_url, cover_url')
-        .eq('restaurant_id', RESTAURANT_ID)
-        .maybeSingle(),
-      supabase
-        .from('restaurant_settings')
-        .select('restaurant_id, currency, timezone, order_number_prefix, min_order_amount, tax_rate, accepts_delivery, accepts_pickup')
-        .eq('restaurant_id', RESTAURANT_ID)
-        .maybeSingle(),
-      supabase
-        .from('delivery_zones')
-        .select('id, name, delivery_fee, min_order_amount, is_active')
-        .eq('restaurant_id', RESTAURANT_ID)
-        .order('name'),
-      supabase.from('payment_providers').select('id, name, slug, is_active').order('name'),
-      supabase
-        .from('restaurant_payment_configs')
-        .select('id, payment_provider_id, is_active')
-        .eq('restaurant_id', RESTAURANT_ID),
-    ]);
-
-    if (restaurantRes.error) console.error(restaurantRes.error);
-    if (brandingRes.error) console.error(brandingRes.error);
-    if (settingsRes.error) console.error(settingsRes.error);
-    if (zonesRes.error) console.error(zonesRes.error);
-    if (providersRes.error) console.error(providersRes.error);
-    if (configsRes.error) console.error(configsRes.error);
-
-    setRestaurant(restaurantRes.data as Restaurant | null);
-    setBranding(brandingRes.data as Branding | null);
-    setSettings(settingsRes.data as RestaurantSettingsRow | null);
-    setZones((zonesRes.data as DeliveryZone[]) ?? []);
-    setProviders((providersRes.data as PaymentProvider[]) ?? []);
-    setPaymentConfigs((configsRes.data as PaymentConfig[]) ?? []);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  function updateRestaurant<K extends keyof Restaurant>(key: K, value: Restaurant[K]) {
-    setRestaurant((current) => (current ? { ...current, [key]: value } : current));
-  }
-
-  function updateBranding<K extends keyof Branding>(key: K, value: Branding[K]) {
-    setBranding((current) => (current ? { ...current, [key]: value } : current));
-  }
-
-  function updateSettings<K extends keyof RestaurantSettingsRow>(key: K, value: RestaurantSettingsRow[K]) {
-    setSettings((current) => (current ? { ...current, [key]: value } : current));
-  }
-
-  async function saveAll() {
-    if (!restaurant || !branding || !settings) return;
-    setSaving(true);
-    setMessage(null);
-
-    const [restaurantRes, brandingRes, settingsRes] = await Promise.all([
-      supabase
-        .from('restaurants')
-        .update({
-          name: restaurant.name.trim(),
-          description: restaurant.description?.trim() || null,
-          logo_url: restaurant.logo_url || null,
-          cover_image_url: restaurant.cover_image_url || null,
-          phone: restaurant.phone?.trim() || null,
-          email: restaurant.email?.trim() || null,
-          address: restaurant.address?.trim() || null,
-        })
-        .eq('id', RESTAURANT_ID),
-      supabase
-        .from('restaurant_branding')
-        .update({
-          primary_color: branding.primary_color,
-          secondary_color: branding.secondary_color,
-          background_color: branding.background_color,
-          font_family: branding.font_family?.trim() || null,
-          logo_url: restaurant.logo_url || null,
-          cover_url: restaurant.cover_image_url || null,
-        })
-        .eq('restaurant_id', RESTAURANT_ID),
-      supabase
-        .from('restaurant_settings')
-        .update({
-          currency: settings.currency.trim(),
-          timezone: settings.timezone.trim(),
-          order_number_prefix: settings.order_number_prefix?.trim() || null,
-          min_order_amount: Number(settings.min_order_amount) || 0,
-          tax_rate: Number(settings.tax_rate) || 0,
-          accepts_delivery: settings.accepts_delivery,
-          accepts_pickup: settings.accepts_pickup,
-        })
-        .eq('restaurant_id', RESTAURANT_ID),
-    ]);
-
-    const error = restaurantRes.error || brandingRes.error || settingsRes.error;
-    setSaving(false);
-    setMessage(error ? `Couldn't save settings: ${error.message}` : 'Settings saved successfully.');
-  }
-
-  function openNewZone() {
-    setZoneName('');
-    setZoneFee(0);
-    setZoneMinOrder(0);
-    setZoneActive(true);
-    setZoneDraft('new');
-  }
-
-  function openZone(zone: DeliveryZone) {
-    setZoneName(zone.name);
-    setZoneFee(Number(zone.delivery_fee));
-    setZoneMinOrder(Number(zone.min_order_amount));
-    setZoneActive(zone.is_active);
-    setZoneDraft(zone);
-  }
-
-  async function saveZone() {
-    if (!zoneName.trim()) return;
-    const payload = {
-      restaurant_id: RESTAURANT_ID,
-      name: zoneName.trim(),
-      delivery_fee: Math.max(0, Number(zoneFee) || 0),
-      min_order_amount: Math.max(0, Number(zoneMinOrder) || 0),
-      is_active: zoneActive,
-    };
-
-    if (zoneDraft === 'new') {
-      await supabase.from('delivery_zones').insert(payload);
-    } else if (zoneDraft) {
-      await supabase.from('delivery_zones').update(payload).eq('id', zoneDraft.id);
-    }
-    setZoneDraft(null);
-    load();
-  }
-
-  async function removeZone(zone: DeliveryZone) {
-    if (!confirm(`Delete delivery zone "${zone.name}"?`)) return;
-    await supabase.from('delivery_zones').delete().eq('id', zone.id);
-    load();
-  }
-
-  async function togglePayment(providerId: string, enabled: boolean) {
-    const existing = paymentConfigs.find((config) => config.payment_provider_id === providerId);
-    if (existing) {
-      await supabase.from('restaurant_payment_configs').update({ is_active: enabled }).eq('id', existing.id);
-    } else {
-      await supabase.from('restaurant_payment_configs').insert({
-        restaurant_id: RESTAURANT_ID,
-        payment_provider_id: providerId,
-        is_active: enabled,
-      });
-    }
-    load();
-  }
-
-  if (loading) return <div className="p-8 text-sm text-ink/50">Loading settings…</div>;
-
-  if (!restaurant || !settings) {
-    return <div className="p-8 text-sm text-danger">Restaurant settings could not be loaded.</div>;
-  }
-
-  return (
-    <div className="max-w-6xl p-8">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold text-ink">Settings</h1>
-          <p className="mt-1 text-sm text-ink/60">Manage restaurant information, branding, ordering, delivery and payments.</p>
-        </div>
-        <button
-          onClick={saveAll}
-          disabled={saving}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-dark disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : 'Save Changes'}
-        </button>
-      </div>
-
-      {message && <div className="mt-4 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink/70">{message}</div>}
-
-      <section className="mt-6 rounded-2xl border border-line bg-surface p-6">
-        <h2 className="font-display text-lg font-semibold">Restaurant Info</h2>
-        <p className="mt-1 text-sm text-ink/50">The information customers see about the restaurant.</p>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <div>
-            <label className={labelClass}>Name</label>
-            <input className={inputClass} value={restaurant.name} onChange={(e) => updateRestaurant('name', e.target.value)} />
-          </div>
-          <div>
-            <label className={labelClass}>Phone</label>
-            <input className={inputClass} value={restaurant.phone ?? ''} onChange={(e) => updateRestaurant('phone', e.target.value)} />
-          </div>
-          <div>
-            <label className={labelClass}>Email</label>
-            <input type="email" className={inputClass} value={restaurant.email ?? ''} onChange={(e) => updateRestaurant('email', e.target.value)} />
-          </div>
-          <div>
-            <label className={labelClass}>Address</label>
-            <input className={inputClass} value={restaurant.address ?? ''} onChange={(e) => updateRestaurant('address', e.target.value)} />
-          </div>
-          <div className="md:col-span-2">
-            <label className={labelClass}>Description</label>
-            <textarea rows={3} className={inputClass} value={restaurant.description ?? ''} onChange={(e) => updateRestaurant('description', e.target.value)} />
-          </div>
-          <div>
-            <label className={labelClass}>Logo</label>
-            <div className="mt-1"><ImageUpload value={restaurant.logo_url ?? ''} onChange={(url) => updateRestaurant('logo_url', url || null)} /></div>
-          </div>
-          <div>
-            <label className={labelClass}>Cover Image</label>
-            <div className="mt-1"><ImageUpload value={restaurant.cover_image_url ?? ''} onChange={(url) => updateRestaurant('cover_image_url', url || null)} /></div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-6 rounded-2xl border border-line bg-surface p-6">
-        <h2 className="font-display text-lg font-semibold">Branding</h2>
-        <p className="mt-1 text-sm text-ink/50">Colors used by the customer app and dashboard branding.</p>
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <ColorField label="Primary Color" value={branding?.primary_color ?? '#000000'} onChange={(value) => branding && updateBranding('primary_color', value)} />
-          <ColorField label="Secondary Color" value={branding?.secondary_color ?? '#000000'} onChange={(value) => branding && updateBranding('secondary_color', value)} />
-          <ColorField label="Background Color" value={branding?.background_color ?? '#ffffff'} onChange={(value) => branding && updateBranding('background_color', value)} />
-        </div>
-        <div className="mt-4 max-w-md">
-          <label className={labelClass}>Font Family</label>
-          <input className={inputClass} value={branding?.font_family ?? ''} onChange={(e) => branding && updateBranding('font_family', e.target.value)} placeholder="Optional font family" />
-        </div>
-        <div className="mt-5 rounded-xl border border-line bg-canvas p-4">
-          <p className={labelClass}>Preview</p>
-          <div className="mt-3 flex items-center gap-3 rounded-lg p-4" style={{ background: branding?.background_color, fontFamily: branding?.font_family || undefined }}>
-            <div className="h-10 w-10 rounded-lg" style={{ background: branding?.primary_color }} />
-            <div>
-              <p className="font-semibold" style={{ color: branding?.primary_color }}>Restaurant App</p>
-              <p className="text-xs" style={{ color: branding?.secondary_color }}>Brand preview</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-6 rounded-2xl border border-line bg-surface p-6">
-        <h2 className="font-display text-lg font-semibold">Pricing & Ordering</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <div>
-            <label className={labelClass}>Tax Rate (%)</label>
-            <input type="number" min={0} step="0.01" className={inputClass} value={settings.tax_rate} onChange={(e) => updateSettings('tax_rate', Number(e.target.value))} />
-          </div>
-          <div>
-            <label className={labelClass}>Minimum Order Amount</label>
-            <input type="number" min={0} step="0.01" className={inputClass} value={settings.min_order_amount ?? 0} onChange={(e) => updateSettings('min_order_amount', Number(e.target.value))} />
-          </div>
-          <div>
-            <label className={labelClass}>Currency</label>
-            <input className={inputClass} value={settings.currency} onChange={(e) => updateSettings('currency', e.target.value)} />
-          </div>
-          <div>
-            <label className={labelClass}>Timezone</label>
-            <input className={inputClass} value={settings.timezone} onChange={(e) => updateSettings('timezone', e.target.value)} />
-          </div>
-          <div>
-            <label className={labelClass}>Order Number Prefix</label>
-            <input className={inputClass} value={settings.order_number_prefix ?? ''} onChange={(e) => updateSettings('order_number_prefix', e.target.value)} placeholder="e.g. CAF" />
-          </div>
-        </div>
-        <div className="mt-5 flex flex-wrap gap-6">
-          <Toggle label="Accept Delivery" checked={settings.accepts_delivery} onChange={(value) => updateSettings('accepts_delivery', value)} />
-          <Toggle label="Accept Pickup" checked={settings.accepts_pickup} onChange={(value) => updateSettings('accepts_pickup', value)} />
-        </div>
-      </section>
-
-      <section className="mt-6 rounded-2xl border border-line bg-surface p-6">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="font-display text-lg font-semibold">Delivery Zones</h2>
-            <p className="mt-1 text-sm text-ink/50">Set delivery fees and minimum orders per zone.</p>
-          </div>
-          <button onClick={openNewZone} className="rounded-lg border border-line px-3 py-2 text-xs font-semibold text-ink hover:border-accent/40">+ Add Zone</button>
-        </div>
-        <div className="mt-5 overflow-hidden rounded-xl border border-line">
-          {zones.length === 0 ? (
-            <p className="p-4 text-sm text-ink/50">No delivery zones yet.</p>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-line bg-canvas/60 text-xs uppercase tracking-wide text-ink/50">
-                <tr><th className="px-4 py-3">Zone</th><th className="px-4 py-3">Delivery Fee</th><th className="px-4 py-3">Min Order</th><th className="px-4 py-3">Status</th><th className="px-4 py-3"></th></tr>
-              </thead>
-              <tbody>
-                {zones.map((zone) => (
-                  <tr key={zone.id} className="border-b border-line last:border-0">
-                    <td className="px-4 py-3 font-medium">{zone.name}</td>
-                    <td className="px-4 py-3">{Number(zone.delivery_fee).toFixed(2)}</td>
-                    <td className="px-4 py-3">{Number(zone.min_order_amount).toFixed(2)}</td>
-                    <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${zone.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{zone.is_active ? 'Active' : 'Disabled'}</span></td>
-                    <td className="px-4 py-3 text-right"><button onClick={() => openZone(zone)} className="mr-3 text-xs font-medium text-accent hover:underline">Edit</button><button onClick={() => removeZone(zone)} className="text-xs font-medium text-danger hover:underline">Delete</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </section>
-
-      <section className="mt-6 rounded-2xl border border-line bg-surface p-6">
-        <h2 className="font-display text-lg font-semibold">Payment Providers</h2>
-        <p className="mt-1 text-sm text-ink/50">Enable the payment providers configured for this restaurant.</p>
-        <div className="mt-5 space-y-3">
-          {providers.length === 0 ? (
-            <p className="text-sm text-ink/50">No payment providers are configured on the platform.</p>
-          ) : providers.map((provider) => {
-            const config = paymentConfigs.find((item) => item.payment_provider_id === provider.id);
-            const enabled = config?.is_active ?? false;
-            return (
-              <div key={provider.id} className="flex items-center justify-between rounded-xl border border-line bg-canvas px-4 py-3">
-                <div><p className="text-sm font-medium">{provider.name}</p><p className="text-xs text-ink/40">{provider.slug}</p></div>
-                <Toggle label={enabled ? 'Enabled' : 'Disabled'} checked={enabled} onChange={(value) => togglePayment(provider.id, value)} />
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-          Payment credentials are intentionally not stored in the dashboard database. The current schema has no credential fields; secret provider keys should be handled server-side through Edge Functions/secret storage rather than exposed to the browser.
-        </div>
-      </section>
-
-      {zoneDraft && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-xl">
-            <div className="flex items-center justify-between"><h2 className="font-display text-lg font-semibold">{zoneDraft === 'new' ? 'Add Delivery Zone' : 'Edit Delivery Zone'}</h2><button onClick={() => setZoneDraft(null)} className="text-ink/40 hover:text-ink">✕</button></div>
-            <label className={`${labelClass} mt-5`}>Zone Name</label>
-            <input className={inputClass} value={zoneName} onChange={(e) => setZoneName(e.target.value)} />
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div><label className={labelClass}>Delivery Fee</label><input type="number" min={0} step="0.01" className={inputClass} value={zoneFee} onChange={(e) => setZoneFee(Number(e.target.value))} /></div>
-              <div><label className={labelClass}>Minimum Order</label><input type="number" min={0} step="0.01" className={inputClass} value={zoneMinOrder} onChange={(e) => setZoneMinOrder(Number(e.target.value))} /></div>
-            </div>
-            <div className="mt-5"><Toggle label="Active" checked={zoneActive} onChange={setZoneActive} /></div>
-            <div className="mt-6 flex justify-end gap-2"><button onClick={() => setZoneDraft(null)} className="rounded-lg border border-line px-4 py-2 text-sm">Cancel</button><button onClick={saveZone} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white">Save Zone</button></div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
-  return (
-    <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-ink/70">
-      <button type="button" onClick={() => onChange(!checked)} className={`relative h-6 w-11 rounded-full transition ${checked ? 'bg-accent' : 'bg-ink/20'}`} aria-pressed={checked}>
-        <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${checked ? 'left-6' : 'left-1'}`} />
-      </button>
-      {label}
-    </label>
-  );
-}
-
-function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return (
-    <div>
-      <label className={labelClass}>{label}</label>
-      <div className="mt-1 flex gap-2">
-        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-10 w-12 cursor-pointer rounded border border-line bg-canvas p-1" />
-        <input className={inputClass.replace('mt-1 ', '')} value={value} onChange={(e) => onChange(e.target.value)} />
-      </div>
-    </div>
-  );
-}
+function Title({t,d}:{t:string;d:string}){return <div><h2 className="font-display text-lg font-semibold">{t}</h2><p className="mt-1 text-sm text-ink/50">{d}</p></div>}
+function F({l,children,wide=false}:{l:string;children:React.ReactNode;wide?:boolean}){return <div className={wide?'md:col-span-2':''}><label className={label}>{l}</label>{children}</div>}
+function Toggle({l,v,c}:{l:string;v:boolean;c:(v:boolean)=>void}){return <label className="flex min-h-[42px] cursor-pointer items-center justify-between gap-3 rounded-lg border border-line bg-canvas px-3 py-2 text-sm"><span>{l}</span><button type="button" onClick={()=>c(!v)} className={`relative h-6 w-11 rounded-full ${v?'bg-accent':'bg-ink/20'}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white ${v?'left-6':'left-1'}`}/></button></label>}
+function Sub({title,action,onClick}:{title:string;action:string;onClick:()=>void}){return <div className="mt-6 border-t border-line pt-5"><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">{title}</h3></div><button onClick={onClick} className="rounded-lg border border-line px-3 py-2 text-sm font-semibold">{action}</button></div></div>}
+function Row({title,text,edit,del}:{title:string;text:string;edit:()=>void;del:()=>void}){return <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-canvas p-3"><div><p className="font-medium">{title}</p><p className="text-xs text-ink/50">{text}</p></div><div className="flex gap-3"><button onClick={edit} className="text-sm font-medium text-accent">Edit</button><button onClick={del} className="text-sm font-medium text-danger">Delete</button></div></div>}
+function Brand({title,keys,b,set}:{title:string;keys:(keyof Branding)[];b:Branding;set:React.Dispatch<React.SetStateAction<Branding|null>>}){return <div className="rounded-xl border border-line bg-canvas p-4"><h3 className="font-semibold">{title}</h3><div className="mt-4 grid gap-4 md:grid-cols-3">{keys.map(k=><div key={k}><label className={label}>{String(k).replaceAll('_',' ').replace('customer ','').replace('dashboard ','')}</label><div className="mt-1 flex gap-2"><input type="color" value={String(b[k])} onChange={e=>set({...b,[k]:e.target.value})} className="h-10 w-12 rounded border border-line bg-transparent"/><input className={input.replace('mt-1 ','')} value={String(b[k])} onChange={e=>set({...b,[k]:e.target.value})}/></div></div>)}</div></div>}
+function Modal({title,close,save,children}:{title:string;close:()=>void;save:()=>void;children:React.ReactNode}){return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-lg rounded-2xl border border-line bg-surface p-6 shadow-xl"><div className="flex items-center justify-between"><h2 className="font-display text-lg font-semibold">{title}</h2><button onClick={close} className="text-ink/50">✕</button></div><div className="mt-5 space-y-4">{children}</div><div className="mt-6 flex justify-end gap-2"><button onClick={close} className="rounded-lg border border-line px-4 py-2 text-sm">Cancel</button><button onClick={save} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white">Save</button></div></div></div>}
