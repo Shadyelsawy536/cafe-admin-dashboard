@@ -9,21 +9,32 @@ interface Stats {
   avgOrderValue: number;
 }
 
+function formatCurrency(amount: number, currency: string) {
+  const code = currency.trim().toUpperCase();
+  const symbols: Record<string, string> = { EGP: 'EGP', USD: '$', EUR: '€', GBP: '£', SAR: 'SAR', AED: 'AED' };
+  return `${symbols[code] ?? code} ${amount.toFixed(2)}`;
+}
+
 export function Overview() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currency, setCurrency] = useState('EGP');
 
   useEffect(() => {
     async function load() {
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
 
-      const { data, error } = await supabase
-        .from('orders')
-        .select('total, status, created_at')
-        .eq('restaurant_id', RESTAURANT_ID)
-        .gte('created_at', startOfToday.toISOString());
+      const [{ data: settings }, { data, error }] = await Promise.all([
+        supabase.from('restaurant_settings').select('currency').eq('restaurant_id', RESTAURANT_ID).maybeSingle(),
+        supabase
+          .from('orders')
+          .select('total, status, created_at')
+          .eq('restaurant_id', RESTAURANT_ID)
+          .gte('created_at', startOfToday.toISOString()),
+      ]);
 
+      if (settings?.currency) setCurrency(settings.currency);
       if (!error && data) {
         const todaySales = data.reduce((sum, o) => sum + Number(o.total), 0);
         const todayOrders = data.length;
@@ -45,10 +56,10 @@ export function Overview() {
         <p className="mt-8 text-sm text-ink/50">Loading…</p>
       ) : (
         <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Today's Sales" value={`€${(stats?.todaySales ?? 0).toFixed(2)}`} accent="text-accent" />
+          <StatCard label="Today's Sales" value={formatCurrency(stats?.todaySales ?? 0, currency)} accent="text-accent" />
           <StatCard label="Orders Today" value={String(stats?.todayOrders ?? 0)} />
           <StatCard label="Pending" value={String(stats?.pendingCount ?? 0)} accent="text-status-pending" />
-          <StatCard label="Avg. Order Value" value={`€${(stats?.avgOrderValue ?? 0).toFixed(2)}`} />
+          <StatCard label="Avg. Order Value" value={formatCurrency(stats?.avgOrderValue ?? 0, currency)} />
         </div>
       )}
     </div>
