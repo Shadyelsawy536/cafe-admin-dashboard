@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { to: '/products', label: 'Products', icon: '☕' },
   { to: '/categories', label: 'Categories', icon: '▦' },
   { to: '/modifier-groups', label: 'Modifier Groups', icon: '✦' },
+  { to: '/reports', label: 'Reports', icon: '◫' },
   { to: '/delivery-zones', label: 'Delivery Zones', icon: '⌖' },
   { to: '/settings', label: 'Settings', icon: '⚙' },
 ];
