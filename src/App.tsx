@@ -7,6 +7,7 @@ import { Orders } from './pages/Orders';
 import { Categories } from './pages/Categories';
 import { ModifierGroups } from './pages/ModifierGroups';
 import { Products } from './pages/Products';
+import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
 import DeliveryZones from './pages/DeliveryZones';
 
@@ -20,6 +21,6 @@ function ProtectedShell() {
 
 export default function App() {
   return <AuthProvider><BrowserRouter><Routes><Route path="/login" element={<Login />} /><Route element={<ProtectedShell />}>
-    <Route path="/" element={<Overview />} /><Route path="/orders" element={<Orders />} /><Route path="/products" element={<Products />} /><Route path="/categories" element={<Categories />} /><Route path="/modifier-groups" element={<ModifierGroups />} /><Route path="/settings" element={<Settings />} /><Route path="/delivery-zones" element={<DeliveryZones />} />
+    <Route path="/" element={<Overview />} /><Route path="/orders" element={<Orders />} /><Route path="/products" element={<Products />} /><Route path="/categories" element={<Categories />} /><Route path="/modifier-groups" element={<ModifierGroups />} /><Route path="/reports" element={<Reports />} /><Route path="/settings" element={<Settings />} /><Route path="/delivery-zones" element={<DeliveryZones />} />
   </Route><Route path="*" element={<Navigate to="/" replace />} /></Routes></BrowserRouter></AuthProvider>;
 }
