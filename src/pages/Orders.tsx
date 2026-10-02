@@ -70,6 +70,7 @@ export function Orders() {
            order_item_modifiers(modifier_name, price))`
       )
       .eq('restaurant_id', RESTAURANT_ID)
+      .eq('payment_verified', true)
       .order('created_at', { ascending: false });
 
     if (!error && data) setOrders(data as unknown as OrderRow[]);
@@ -115,6 +116,21 @@ export function Orders() {
         schema: 'public',
         table: 'orders',
         filter: `restaurant_id=eq.${RESTAURANT_ID}`,
+      },
+      () => {
+        load();
+      }
+    )
+
+    // Paymob orders are hidden from staff until payment_verified is true.
+    // The order UPDATE can therefore be invisible under RLS, so a payment
+    // update also refreshes the list. Payments RLS still scopes events.
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'payments',
       },
       () => {
         load();
