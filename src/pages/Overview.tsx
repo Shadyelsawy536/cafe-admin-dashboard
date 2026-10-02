@@ -29,9 +29,11 @@ export function Overview() {
         supabase.from('restaurant_settings').select('currency').eq('restaurant_id', RESTAURANT_ID).maybeSingle(),
         supabase
           .from('orders')
-          .select('total, status, created_at')
+          .select('total, status, created_at, payment_verified')
           .eq('restaurant_id', RESTAURANT_ID)
-          .gte('created_at', startOfToday.toISOString()),
+          .eq('payment_verified', true)
+          .gte('created_at', startOfToday.toISOString())
+          .not('status', 'in', '(cancelled,rejected)'),
       ]);
 
       if (settings?.currency) setCurrency(settings.currency);
