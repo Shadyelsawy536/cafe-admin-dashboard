@@ -87,7 +87,6 @@ export function Layout() {
 
   useEffect(() => {
     const primeAudio = () => {
-      // A user interaction gives the browser permission to resume audio later.
       try {
         const AudioContextCtor =
           window.AudioContext ||
@@ -158,29 +157,65 @@ export function Layout() {
     playNewOrderAlert();
   };
 
-  const visibleItems = NAV_ITEMS.filter(item => item.permission === null || hasPermission(item.permission));
-  return <div className="flex h-screen bg-canvas text-ink">
-    <aside className="flex w-60 flex-col border-r border-line bg-surface">
-      <div className="flex items-center gap-2 border-b border-line px-6 py-5">
-        <span className="font-display text-lg font-semibold tracking-tight">Cafe</span>
-        <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">Admin</span>
-      </div>
-      <nav className="flex-1 space-y-1 px-3 py-4">{visibleItems.map(item => <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({isActive}) => `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-accent text-white' : 'text-ink/70 hover:bg-canvas hover:text-ink'}`}><span className="text-base leading-none">{item.icon}</span>{item.label}</NavLink>)}</nav>
-      <div className="border-t border-line px-4 py-4">
-        <p className="truncate text-xs font-medium text-ink">{user?.email}</p>
-        <p className="text-[11px] uppercase tracking-wide text-ink/40">{roleName}</p>
-        {!alertsEnabled && (
-          <button onClick={() => void enableAlerts()} className="mt-2 w-full rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-dark">
-            Enable order alerts 🔔
+  const visibleItems = NAV_ITEMS.filter(
+    item => item.permission === null || hasPermission(item.permission),
+  );
+
+  return (
+    <div className="flex h-screen bg-canvas text-ink">
+      <aside className="flex w-60 flex-col border-r border-line bg-surface">
+        <div className="flex items-center gap-2 border-b border-line px-6 py-5">
+          <span className="font-display text-lg font-semibold tracking-tight">Cafe</span>
+          <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+            Admin
+          </span>
+        </div>
+
+        <nav className="flex-1 space-y-1 px-3 py-4">
+          {visibleItems.map(item => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-accent text-white'
+                    : 'text-ink/70 hover:bg-canvas hover:text-ink'
+                }`
+              }
+            >
+              <span className="text-base leading-none">{item.icon}</span>
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="border-t border-line px-4 py-4">
+          <p className="truncate text-xs font-medium text-ink">{user?.email}</p>
+          <p className="text-[11px] uppercase tracking-wide text-ink/40">{roleName}</p>
+
+          {!alertsEnabled && (
+            <button
+              onClick={() => void enableAlerts()}
+              className="mt-2 w-full rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-dark"
+            >
+              Enable order alerts 🔔
+            </button>
+          )}
+
+          <button
+            onClick={signOut}
+            className="mt-2 text-xs font-medium text-accent hover:underline"
+          >
+            Sign out
           </button>
-        )}
-        <button onClick={signOut} className="mt-2 text-xs font-medium text-accent hover:underline">Sign out</button>
-      </div>
-    </aside>
-    <main className="flex-1 overflow-y-auto"><Outlet /></main>
-  </div>;
-}
-  const { user, roleName, hasPermission, signOut } = useAuth();
-  const visibleItems = NAV_ITEMS.filter(item => item.permission === null || hasPermission(item.permission));
-  return <div className="flex h-screen bg-canvas text-ink"><aside className="flex w-60 flex-col border-r border-line bg-surface"><div className="flex items-center gap-2 border-b border-line px-6 py-5"><span className="font-display text-lg font-semibold tracking-tight">Cafe</span><span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">Admin</span></div><nav className="flex-1 space-y-1 px-3 py-4">{visibleItems.map(item => <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({isActive}) => `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-accent text-white' : 'text-ink/70 hover:bg-canvas hover:text-ink'}`}><span className="text-base leading-none">{item.icon}</span>{item.label}</NavLink>)}</nav><div className="border-t border-line px-4 py-4"><p className="truncate text-xs font-medium text-ink">{user?.email}</p><p className="text-[11px] uppercase tracking-wide text-ink/40">{roleName}</p><button onClick={signOut} className="mt-2 text-xs font-medium text-accent hover:underline">Sign out</button></div></aside><main className="flex-1 overflow-y-auto"><Outlet /></main></div>;
+        </div>
+      </aside>
+
+      <main className="flex-1 overflow-y-auto">
+        <Outlet />
+      </main>
+    </div>
+  );
 }
