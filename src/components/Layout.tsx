@@ -78,20 +78,12 @@ function playNewOrderAlert() {
 
         oscillator.type = 'sine';
         oscillator.frequency.value = note.frequency;
-
         gain.gain.setValueAtTime(0.0001, now + note.offset);
-        gain.gain.exponentialRampToValueAtTime(
-          0.22,
-          now + note.offset + 0.02,
-        );
-        gain.gain.exponentialRampToValueAtTime(
-          0.0001,
-          now + note.offset + 0.18,
-        );
+        gain.gain.exponentialRampToValueAtTime(0.22, now + note.offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + note.offset + 0.18);
 
         oscillator.connect(gain);
         gain.connect(audio.destination);
-
         oscillator.start(now + note.offset);
         oscillator.stop(now + note.offset + 0.2);
       }
@@ -144,6 +136,67 @@ export function Layout() {
   }, []);
 
   useEffect(() => {
+    const alertOrder = (orderId: string) => {
+      if (seenEvents.current.has(`order:${orderId}`)) return;
+      seenEvents.current.add(`order:${orderId}`);
+
+      playNewOrderAlert();
+      showNewOrderNotification(() => navigate('/orders'));
+    };
+
+    const handleOrderInsert = async (payload: { new: unknown }) => {
+      const inserted = payload.new as { id?: string };
+
+      if (!inserted.id) return;
+
+      // Read the row back instead of trusting the Realtime payload for the
+      // payment flag. This handles cases where the Realtime payload is
+      // incomplete while keeping unpaid Visa orders silent.
+      const { data: order } = await supabase
+        .from('orders')
+        .select('id, restaurant_id, payment_verified')
+        .eq('id', inserted.id)
+        .maybeSingle();
+
+      if (
+        order?.id &&
+        order.restaurant_id === RESTAURANT_ID &&
+        order.payment_verified === true
+      ) {
+        alertOrder(order.id);
+      }
+    };
+
+    const handlePaymentUpdate = async (payload: { new: unknown }) => {
+      const payment = payload.new as { id?: string; status?: string };
+
+      if (!payment.id || payment.status !== 'paid') return;
+
+      // Resolve the payment to its order, then verify the order belongs to
+      // this restaurant and is actually payment_verified before alerting.
+      const { data: paymentRow } = await supabase
+        .from('payments')
+        .select('id, order_id, status')
+        .eq('id', payment.id)
+        .maybeSingle();
+
+      if (!paymentRow?.order_id || paymentRow.status !== 'paid') return;
+
+      const { data: order } = await supabase
+        .from('orders')
+        .select('id, restaurant_id, payment_verified')
+        .eq('id', paymentRow.order_id)
+        .maybeSingle();
+
+      if (
+        order?.id &&
+        order.restaurant_id === RESTAURANT_ID &&
+        order.payment_verified === true
+      ) {
+        alertOrder(order.id);
+      }
+    };
+
     const channel = supabase
       .channel(`dashboard-order-alerts-${RESTAURANT_ID}`)
       .on(
@@ -154,18 +207,8 @@ export function Layout() {
           table: 'orders',
           filter: `restaurant_id=eq.${RESTAURANT_ID}`,
         },
-        (payload) => {
-          const order = payload.new as {
-            id?: string;
-            payment_verified?: boolean;
-          };
-
-          if (!order.id || order.payment_verified !== true) return;
-          if (seenEvents.current.has(`order:${order.id}`)) return;
-          seenEvents.current.add(`order:${order.id}`);
-
-          playNewOrderAlert();
-          showNewOrderNotification(() => navigate('/orders'));
+        payload => {
+          void handleOrderInsert(payload);
         },
       )
       .on(
@@ -175,15 +218,8 @@ export function Layout() {
           schema: 'public',
           table: 'payments',
         },
-        (payload) => {
-          const payment = payload.new as { id?: string; status?: string };
-
-          if (!payment.id || payment.status !== 'paid') return;
-          if (seenEvents.current.has(`payment:${payment.id}`)) return;
-          seenEvents.current.add(`payment:${payment.id}`);
-
-          playNewOrderAlert();
-          showNewOrderNotification(() => navigate('/orders'));
+        payload => {
+          void handlePaymentUpdate(payload);
         },
       )
       .subscribe();
@@ -191,7 +227,7 @@ export function Layout() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [navigate]);
+  }, [navigate, roleName]);
 
   const enableAlerts = async () => {
     if ('Notification' in window) {
