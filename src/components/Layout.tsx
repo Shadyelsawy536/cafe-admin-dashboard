@@ -21,40 +21,89 @@ const NAV_ITEMS = [
   { to: '/payments', label: 'Payments', icon: '◆', permission: 'payments.manage' },
 ] as const;
 
+type AudioContextWithWebkit = typeof AudioContext & {
+  new (): AudioContext;
+};
+
+let alertAudioContext: AudioContext | null = null;
+
+function getAlertAudioContext() {
+  if (typeof window === 'undefined') return null;
+
+  const AudioContextCtor =
+    window.AudioContext ||
+    (window as typeof window & {
+      webkitAudioContext?: AudioContextWithWebkit;
+    }).webkitAudioContext;
+
+  if (!AudioContextCtor) return null;
+
+  if (!alertAudioContext) {
+    alertAudioContext = new AudioContextCtor();
+  }
+
+  return alertAudioContext;
+}
+
+async function unlockAlertAudio() {
+  try {
+    const audio = getAlertAudioContext();
+    if (!audio) return;
+
+    if (audio.state === 'suspended') {
+      await audio.resume();
+    }
+  } catch {
+    // Browser autoplay restrictions must never break the dashboard.
+  }
+}
+
 function playNewOrderAlert() {
   try {
-    const AudioContextCtor =
-      window.AudioContext ||
-      (window as typeof window & { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (!AudioContextCtor) return;
+    const audio = getAlertAudioContext();
+    if (!audio) return;
 
-    const audio = new AudioContextCtor();
-    const now = audio.currentTime;
-    const notes = [
-      { offset: 0, frequency: 880 },
-      { offset: 0.22, frequency: 1175 },
-      { offset: 0.44, frequency: 880 },
-      { offset: 0.66, frequency: 1175 },
-    ];
+    const play = () => {
+      const now = audio.currentTime;
+      const notes = [
+        { offset: 0, frequency: 880 },
+        { offset: 0.22, frequency: 1175 },
+        { offset: 0.44, frequency: 880 },
+        { offset: 0.66, frequency: 1175 },
+      ];
 
-    for (const note of notes) {
-      const oscillator = audio.createOscillator();
-      const gain = audio.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = note.frequency;
-      gain.gain.setValueAtTime(0.0001, now + note.offset);
-      gain.gain.exponentialRampToValueAtTime(0.22, now + note.offset + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + note.offset + 0.18);
-      oscillator.connect(gain);
-      gain.connect(audio.destination);
-      oscillator.start(now + note.offset);
-      oscillator.stop(now + note.offset + 0.2);
+      for (const note of notes) {
+        const oscillator = audio.createOscillator();
+        const gain = audio.createGain();
+
+        oscillator.type = 'sine';
+        oscillator.frequency.value = note.frequency;
+
+        gain.gain.setValueAtTime(0.0001, now + note.offset);
+        gain.gain.exponentialRampToValueAtTime(
+          0.22,
+          now + note.offset + 0.02,
+        );
+        gain.gain.exponentialRampToValueAtTime(
+          0.0001,
+          now + note.offset + 0.18,
+        );
+
+        oscillator.connect(gain);
+        gain.connect(audio.destination);
+
+        oscillator.start(now + note.offset);
+        oscillator.stop(now + note.offset + 0.2);
+      }
+    };
+
+    if (audio.state === 'suspended') {
+      void audio.resume().then(play).catch(() => {});
+    } else {
+      play();
     }
-
-    window.setTimeout(() => void audio.close(), 1200);
   } catch {
-    // Browser autoplay/audio restrictions must never break the dashboard.
+    // Browser audio restrictions must never break the dashboard.
   }
 }
 
@@ -87,17 +136,7 @@ export function Layout() {
 
   useEffect(() => {
     const primeAudio = () => {
-      try {
-        const AudioContextCtor =
-          window.AudioContext ||
-          (window as typeof window & { webkitAudioContext?: typeof AudioContext })
-            .webkitAudioContext;
-        if (!AudioContextCtor) return;
-        const audio = new AudioContextCtor();
-        void audio.resume().finally(() => void audio.close());
-      } catch {
-        // Ignore browser-specific audio restrictions.
-      }
+      void unlockAlertAudio();
     };
 
     window.addEventListener('pointerdown', primeAudio, { passive: true });
@@ -116,7 +155,11 @@ export function Layout() {
           filter: `restaurant_id=eq.${RESTAURANT_ID}`,
         },
         (payload) => {
-          const order = payload.new as { id?: string; payment_verified?: boolean };
+          const order = payload.new as {
+            id?: string;
+            payment_verified?: boolean;
+          };
+
           if (!order.id || order.payment_verified !== true) return;
           if (seenEvents.current.has(`order:${order.id}`)) return;
           seenEvents.current.add(`order:${order.id}`);
@@ -134,6 +177,7 @@ export function Layout() {
         },
         (payload) => {
           const payment = payload.new as { id?: string; status?: string };
+
           if (!payment.id || payment.status !== 'paid') return;
           if (seenEvents.current.has(`payment:${payment.id}`)) return;
           seenEvents.current.add(`payment:${payment.id}`);
@@ -154,6 +198,8 @@ export function Layout() {
       const permission = await Notification.requestPermission();
       setAlertsEnabled(permission === 'granted');
     }
+
+    await unlockAlertAudio();
     playNewOrderAlert();
   };
 
