@@ -79,8 +79,12 @@ export function Payments() {
     setLoading(false);
 
     if (providerRows.length && !selectedProviderId) {
-      const firstActive = providerRows.find((p) => p.is_active);
-      if (firstActive) await selectProvider(firstActive.id, accountRows);
+      // Prefer the restaurant's currently active provider, not the first
+      // provider enabled globally by the platform.
+      const current = accountRows.find((a) => a.is_active);
+      const chosen = providerRows.find((p) => p.id === current?.provider_id) ??
+        providerRows.find((p) => p.is_active);
+      if (chosen) await selectProvider(chosen.id, accountRows);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -130,6 +134,7 @@ export function Payments() {
       <h1 className="font-display text-2xl font-semibold text-ink">Payments</h1>
       <p className="mt-1 text-sm text-ink/60">
         Connect your own payment provider account. Credentials are encrypted and never shown again once saved.
+        Saving a provider makes it the restaurant's only active online payment provider. Other providers' saved credentials are retained for switching back later.
       </p>
 
       {loading ? (
@@ -158,6 +163,11 @@ export function Payments() {
           {selectedProvider && (
             <div className="mt-6 rounded-2xl border border-line bg-surface p-5">
               <h2 className="text-sm font-semibold text-ink">{selectedProvider.name} Settings</h2>
+              {accounts.some((a) => a.is_active && a.provider_id !== selectedProvider.id) && (
+                <p className="mt-2 rounded-lg border border-line bg-canvas p-3 text-sm text-ink/70">
+                  Saving these settings switches online checkout to {selectedProvider.name} and deactivates the currently selected provider for this restaurant. Its saved credentials will be kept.
+                </p>
+              )}
 
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
