@@ -3,6 +3,7 @@ name: Checkout idempotency database test
 on:
   pull_request:
     paths:
+      - "supabase/migrations/20261019150000_harden_order_checkout.sql"
       - "supabase/migrations/20261019152000_add_checkout_idempotency_rpc.sql"
       - ".github/workflows/checkout-idempotency-db-test.yml"
   push:
@@ -56,6 +57,7 @@ jobs:
 
           create type public.delivery_type as enum ('delivery', 'pickup');
           create type public.payment_method as enum ('cash', 'card');
+          create type public.discount_type as enum ('percentage', 'fixed');
 
           create table public.customers (
             id uuid primary key,
@@ -110,6 +112,9 @@ jobs:
             'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
           );
           SQL
+
+      - name: Apply checkout hardening migration to isolated database
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019150000_harden_order_checkout.sql
 
       - name: Apply checkout idempotency migration to isolated database
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019152000_add_checkout_idempotency_rpc.sql
