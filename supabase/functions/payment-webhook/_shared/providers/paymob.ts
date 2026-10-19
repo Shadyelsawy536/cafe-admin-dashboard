@@ -46,7 +46,7 @@ export class PaymobProvider implements PaymentProvider {
     const clientSecret = data.client_secret;
     const checkoutUrl = `https://accept.paymob.com/unifiedcheckout/?publicKey=${credentials.public_key}&clientSecret=${clientSecret}`;
 
-    return { providerPaymentId: String(data.id ?? data.intention_order_id ?? ""), checkoutUrl, raw: data };
+    return { providerPaymentId: String(data.intention_order_id ?? data.id ?? ""), checkoutUrl, raw: data };
   }
 
   // Same payload shape payment-webhook used to parse inline before provider
