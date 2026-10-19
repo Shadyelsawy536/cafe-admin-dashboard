@@ -4,6 +4,7 @@ import { RESTAURANT_ID } from '../lib/tenant';
 
 interface CustomerSummary {
   customer_id: string;
+  customer_key: string;
   full_name: string;
   phone: string;
   order_count: number;
@@ -108,9 +109,9 @@ export function Customers() {
               <tbody>
                 {customers.map((c) => (
                   <tr
-                    key={c.customer_id}
+                    key={c.customer_key}
                     onClick={() => openCustomer(c)}
-                    className={`cursor-pointer border-b border-line last:border-0 hover:bg-canvas/50 ${selected?.customer_id === c.customer_id ? 'bg-canvas' : ''}`}
+                    className={`cursor-pointer border-b border-line last:border-0 hover:bg-canvas/50 ${selected?.customer_key === c.customer_key ? 'bg-canvas' : ''}`}
                   >
                     <td className="px-4 py-3 font-medium text-ink">{c.full_name}</td>
                     <td className="px-4 py-3 text-ink/70">{c.phone}</td>
