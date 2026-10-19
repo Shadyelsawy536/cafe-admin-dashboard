@@ -4,6 +4,7 @@ import { RESTAURANT_ID } from '../lib/tenant';
 
 interface CustomerSummary {
   customer_id: string;
+  customer_key: string;
   full_name: string;
   phone: string;
   order_count: number;
@@ -36,7 +37,7 @@ export function Customers() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.rpc('get_customers_summary', { p_restaurant_id: RESTAURANT_ID });
+    const { data } = await supabase.rpc('get_customers_summary_by_phone', { p_restaurant_id: RESTAURANT_ID });
     setCustomers((data as CustomerSummary[]) ?? []);
     setLoading(false);
   }, []);
@@ -48,17 +49,38 @@ export function Customers() {
   async function openCustomer(customer: CustomerSummary) {
     setSelected(customer);
     setDetailLoading(true);
-    const [addressesRes, ordersRes] = await Promise.all([
-      supabase.from('customer_addresses').select('id, label, building, floor, apartment, street, notes').eq('customer_id', customer.customer_id),
+    const [matchingCustomersRes, phoneOrdersRes, linkedOrdersRes] = await Promise.all([
+      supabase.from('customers').select('id').eq('restaurant_id', RESTAURANT_ID).eq('phone', customer.phone),
       supabase
         .from('orders')
         .select('id, total, status, created_at')
+        .eq('restaurant_id', RESTAURANT_ID)
+        .eq('customer_phone', customer.phone)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('orders')
+        .select('id, total, status, created_at')
+        .eq('restaurant_id', RESTAURANT_ID)
         .eq('customer_id', customer.customer_id)
         .order('created_at', { ascending: false })
-        .limit(10),
+        .limit(50),
     ]);
+    const matchingIds = (matchingCustomersRes.data ?? []).map((row) => row.id);
+    const [addressesRes, allLinkedOrdersRes] = await Promise.all([
+      matchingIds.length
+        ? supabase.from('customer_addresses').select('id, label, building, floor, apartment, street, notes').in('customer_id', matchingIds)
+        : supabase.from('customer_addresses').select('id, label, building, floor, apartment, street, notes').eq('customer_id', customer.customer_id),
+      matchingIds.length > 1
+        ? supabase.from('orders').select('id, total, status, created_at').eq('restaurant_id', RESTAURANT_ID).in('customer_id', matchingIds).order('created_at', { ascending: false }).limit(50)
+        : Promise.resolve({ data: [] as OrderSummaryRow[] }),
+    ]);
+    const uniqueOrders = new Map<string, OrderSummaryRow>();
+    for (const order of [...(phoneOrdersRes.data ?? []), ...(linkedOrdersRes.data ?? []), ...(allLinkedOrdersRes.data ?? [])]) {
+      uniqueOrders.set(order.id, order as OrderSummaryRow);
+    }
     setAddresses(addressesRes.data ?? []);
-    setRecentOrders(ordersRes.data ?? []);
+    setRecentOrders([...uniqueOrders.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, 10));
     setDetailLoading(false);
   }
 
@@ -87,9 +109,9 @@ export function Customers() {
               <tbody>
                 {customers.map((c) => (
                   <tr
-                    key={c.customer_id}
+                    key={c.customer_key}
                     onClick={() => openCustomer(c)}
-                    className={`cursor-pointer border-b border-line last:border-0 hover:bg-canvas/50 ${selected?.customer_id === c.customer_id ? 'bg-canvas' : ''}`}
+                    className={`cursor-pointer border-b border-line last:border-0 hover:bg-canvas/50 ${selected?.customer_key === c.customer_key ? 'bg-canvas' : ''}`}
                   >
                     <td className="px-4 py-3 font-medium text-ink">{c.full_name}</td>
                     <td className="px-4 py-3 text-ink/70">{c.phone}</td>
