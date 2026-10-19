@@ -66,5 +66,9 @@ grant execute on function public.place_order(uuid, uuid, text, text, public.deli
 revoke execute on function public.place_order(uuid, uuid, text, text, public.delivery_type, text, text, public.payment_method, jsonb, text, text, timestamp with time zone) from public, anon;
 grant execute on function public.place_order(uuid, uuid, text, text, public.delivery_type, text, text, public.payment_method, jsonb, text, text, timestamp with time zone) to authenticated;
 
+-- Location-aware checkout is the RPC called by the customer app; it validates auth.uid() and customer ownership internally.
+revoke execute on function public.place_order_with_location(uuid, uuid, text, text, public.delivery_type, text, text, public.payment_method, jsonb, text, text, timestamp with time zone, double precision, double precision) from public, anon;
+grant execute on function public.place_order_with_location(uuid, uuid, text, text, public.delivery_type, text, text, public.payment_method, jsonb, text, text, timestamp with time zone, double precision, double precision) to authenticated;
+
 -- Intentionally unchanged: public.resolve_restaurant_by_domain(text) is needed for storefront tenant resolution.
 commit;
