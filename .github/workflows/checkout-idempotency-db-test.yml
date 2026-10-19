@@ -241,8 +241,13 @@ jobs:
       - name: Pin security-sensitive function search paths in isolated database
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019153000_pin_function_search_paths.sql
 
+      - name: Fetch additive checkout migration candidate
+        run: |
+          git fetch origin safety/checkout-idempotency-additive
+          git show origin/safety/checkout-idempotency-additive:supabase/migrations/20261019152000_add_checkout_idempotency_rpc.sql > /tmp/checkout-idempotency-candidate.sql
+
       - name: Apply checkout idempotency migration to isolated database
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019152000_add_checkout_idempotency_rpc.sql
+        run: psql -v ON_ERROR_STOP=1 -f /tmp/checkout-idempotency-candidate.sql
 
       - name: Verify retry, payload mismatch, and distinct checkout behavior
         run: |
