@@ -120,28 +120,28 @@ jobs:
       - name: Prepare isolated RPC permission fixtures
         run: |
           psql -v ON_ERROR_STOP=1 <<'SQL'
-          create function public.broadcast_order_changes() returns trigger language plpgsql as $ begin return null; end; $;
-          create function public.broadcast_order_realtime() returns trigger language plpgsql as $ begin return null; end; $;
-          create function public.get_platform_analytics() returns jsonb language sql as $ select '{}'::jsonb $;
-          create function public.cancel_subscription(uuid, boolean, text) returns void language plpgsql as $ begin return; end; $;
-          create function public.change_subscription_plan(uuid, uuid) returns void language plpgsql as $ begin return; end; $;
-          create function public.create_restaurant_full(text, text, uuid, text, text, text) returns jsonb language sql as $ select '{}'::jsonb $;
-          create function public.create_restaurant_full(text, text, uuid, text, text, text, text) returns jsonb language sql as $ select '{}'::jsonb $;
-          create function public.extend_subscription(uuid, integer) returns void language plpgsql as $ begin return; end; $;
-          create function public.get_audit_logs(uuid, text, integer) returns jsonb language sql as $ select '{}'::jsonb $;
-          create function public.generate_restaurant_login_id() returns text language sql as $ select '000000'::text $;
-          create function public.get_platform_users() returns jsonb language sql as $ select '{}'::jsonb $;
-          create function public.get_restaurant_details(uuid) returns jsonb language sql as $ select '{}'::jsonb $;
-          create function public.get_system_health() returns jsonb language sql as $ select '{}'::jsonb $;
-          create function public.remove_platform_user(uuid) returns void language plpgsql as $ begin return; end; $;
-          create function public.set_restaurant_status(uuid, public.restaurant_status, text) returns void language plpgsql as $ begin return; end; $;
-          create function public.update_restaurant_login_id(uuid, text) returns void language plpgsql as $ begin return; end; $;
-          create function public.cancel_order(uuid) returns void language plpgsql as $ begin return; end; $;
-          create function public.set_order_metadata(uuid, text, timestamptz) returns void language plpgsql as $ begin return; end; $;
-          create function public.register_customer_push_device(uuid, text, text) returns void language plpgsql as $ begin return; end; $;
-          create function private.is_restaurant_active(uuid) returns boolean language sql as $ select true $;
-          create function public.get_restaurant_availability(uuid) returns jsonb language sql as $ select '{}'::jsonb $;
-          create function public.get_feature_flag(uuid, text) returns boolean language sql as $ select false $;
+          create function public.broadcast_order_changes() returns trigger language plpgsql as $stub$ begin return null; end; $stub$;
+          create function public.broadcast_order_realtime() returns trigger language plpgsql as $stub$ begin return null; end; $stub$;
+          create function public.get_platform_analytics() returns jsonb language sql as $stub$ select '{}'::jsonb $stub$;
+          create function public.cancel_subscription(uuid, boolean, text) returns void language plpgsql as $stub$ begin return; end; $stub$;
+          create function public.change_subscription_plan(uuid, uuid) returns void language plpgsql as $stub$ begin return; end; $stub$;
+          create function public.create_restaurant_full(text, text, uuid, text, text, text) returns jsonb language sql as $stub$ select '{}'::jsonb $stub$;
+          create function public.create_restaurant_full(text, text, uuid, text, text, text, text) returns jsonb language sql as $stub$ select '{}'::jsonb $stub$;
+          create function public.extend_subscription(uuid, integer) returns void language plpgsql as $stub$ begin return; end; $stub$;
+          create function public.get_audit_logs(uuid, text, integer) returns jsonb language sql as $stub$ select '{}'::jsonb $stub$;
+          create function public.generate_restaurant_login_id() returns text language sql as $stub$ select '000000'::text $stub$;
+          create function public.get_platform_users() returns jsonb language sql as $stub$ select '{}'::jsonb $stub$;
+          create function public.get_restaurant_details(uuid) returns jsonb language sql as $stub$ select '{}'::jsonb $stub$;
+          create function public.get_system_health() returns jsonb language sql as $stub$ select '{}'::jsonb $stub$;
+          create function public.remove_platform_user(uuid) returns void language plpgsql as $stub$ begin return; end; $stub$;
+          create function public.set_restaurant_status(uuid, public.restaurant_status, text) returns void language plpgsql as $stub$ begin return; end; $stub$;
+          create function public.update_restaurant_login_id(uuid, text) returns void language plpgsql as $stub$ begin return; end; $stub$;
+          create function public.cancel_order(uuid) returns void language plpgsql as $stub$ begin return; end; $stub$;
+          create function public.set_order_metadata(uuid, text, timestamptz) returns void language plpgsql as $stub$ begin return; end; $stub$;
+          create function public.register_customer_push_device(uuid, text, text) returns void language plpgsql as $stub$ begin return; end; $stub$;
+          create function private.is_restaurant_active(uuid) returns boolean language sql as $stub$ select true $stub$;
+          create function public.get_restaurant_availability(uuid) returns jsonb language sql as $stub$ select '{}'::jsonb $stub$;
+          create function public.get_feature_flag(uuid, text) returns boolean language sql as $stub$ select false $stub$;
           SQL
 
       - name: Apply RPC permission hardening migration to isolated database
