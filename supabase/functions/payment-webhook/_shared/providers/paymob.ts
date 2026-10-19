@@ -1,4 +1,5 @@
 import { PaymentProvider, CreatePaymentParams, CreatePaymentResult, WebhookVerifyResult } from "../payment-provider.ts";
+import { normalizePaymobWebhook } from "../provider-event-normalization.ts";
 
 // Paymob Intention API + Unified Checkout. HMAC field order below is
 // Paymob's own documented 20-field concatenation (developers.paymob.com),
@@ -88,12 +89,13 @@ export class PaymobProvider implements PaymentProvider {
 
     const valid = computedHmac === providedHmac;
 
+    const normalized = normalizePaymobWebhook(obj as Record<string, unknown>);
     return {
       valid,
-      providerEventId: String(obj.id ?? ""),
-      eventType: "transaction",
+      providerEventId: normalized.providerEventId,
+      eventType: normalized.status,
       providerPaymentId: String(obj.order?.id ?? ""),
-      status: obj.success === true ? "paid" : "failed",
+      status: normalized.status,
       raw: payload,
     };
   }
