@@ -1,0 +1,126 @@
+name: Legacy checkout overload regression
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/20261019153000_harden_order_checkout.sql"
+      - "supabase/migrations/20261019153500_legacy_checkout_overload_delegates.sql"
+      - ".github/workflows/legacy-checkout-overload-test.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/20261019153000_harden_order_checkout.sql"
+      - "supabase/migrations/20261019153500_legacy_checkout_overload_delegates.sql"
+      - ".github/workflows/legacy-checkout-overload-test.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-legacy-overload:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: checkout_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d checkout_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: checkout_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Prepare isolated overload test doubles
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          create type public.delivery_type as enum ('delivery', 'pickup');
+          create type public.payment_method as enum ('cash', 'visa');
+          create table public.checkout_capture (
+            id bigint generated always as identity primary key,
+            restaurant_id uuid,
+            customer_id uuid,
+            customer_name text,
+            customer_phone text,
+            delivery_type public.delivery_type,
+            delivery_address text,
+            pickup_branch text,
+            payment_method public.payment_method,
+            items jsonb,
+            coupon_code text,
+            customer_notes text,
+            scheduled_for timestamptz
+          );
+
+          -- Test double only: this confirms the legacy wrapper delegates to
+          -- the 12-argument contract. The production implementation's business
+          -- rules are not simulated by this isolated test.
+          create function public.place_order(
+            uuid, uuid, text, text, public.delivery_type, text, text,
+            public.payment_method, jsonb, text, text, timestamptz
+          ) returns uuid
+          language plpgsql
+          as $$
+          begin
+            insert into public.checkout_capture values (
+              default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+            );
+            return 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid;
+          end;
+          $$;
+          SQL
+
+      - name: Apply legacy overload wrapper migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019153500_legacy_checkout_overload_delegates.sql
+
+      - name: Verify legacy calls delegate to the hardened signature
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          select public.place_order(
+            '11111111-1111-4111-8111-111111111111',
+            '22222222-2222-4222-8222-222222222222',
+            'Regression Customer',
+            '01000000000',
+            'pickup',
+            'test address',
+            null,
+            'cash',
+            '[{"product_id":"test","quantity":1}]'::jsonb,
+            'TESTCOUPON'
+          );
+
+          do $$
+          declare
+            v_row public.checkout_capture%rowtype;
+          begin
+            select * into strict v_row from public.checkout_capture;
+            if v_row.customer_notes is distinct from '' then
+              raise exception 'FAIL: legacy call did not default notes to empty string';
+            end if;
+            if v_row.scheduled_for is not null then
+              raise exception 'FAIL: legacy call did not default scheduled_for to NULL';
+            end if;
+            if v_row.coupon_code is distinct from 'TESTCOUPON' then
+              raise exception 'FAIL: coupon code was not forwarded';
+            end if;
+            if v_row.customer_name is distinct from 'Regression Customer' then
+              raise exception 'FAIL: customer fields were not forwarded';
+            end if;
+            raise notice 'PASS: legacy 10-argument RPC delegates to 12-argument contract';
+          end;
+          $$;
+          SQL
