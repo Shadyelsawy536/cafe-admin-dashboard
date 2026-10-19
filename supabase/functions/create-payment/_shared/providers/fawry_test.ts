@@ -25,9 +25,9 @@ function notification(status: string, secureKey: string, paymentReference = "") 
 Deno.test("Fawry hosted checkout sends required language and signs the exact attempt reference", async () => {
   const provider = new FawryProvider();
   const originalFetch = globalThis.fetch;
-  let sent: Record<string, unknown> | null = null;
+  const sentBodies: Array<Record<string, unknown>> = [];
   globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-    sent = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    sentBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
     return new Response(JSON.stringify({ redirectUrl: "https://checkout.fawry.com/session/123" }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -52,9 +52,10 @@ Deno.test("Fawry hosted checkout sends required language and signs the exact att
     });
 
     assertEquals(result.checkoutUrl, "https://checkout.fawry.com/session/123");
-    assertEquals(sent?.language, "ar-eg");
-    assertEquals(sent?.merchantRefNum, "1790000000123456");
-    assertEquals((sent?.chargeItems as Array<Record<string, unknown>>)[0].price, 125.5);
+    const sent = sentBodies[0];
+    assertEquals(sent.language, "ar-eg");
+    assertEquals(sent.merchantRefNum, "1790000000123456");
+    assertEquals((sent.chargeItems as Array<Record<string, unknown>>)[0].price, 125.5);
   } finally {
     globalThis.fetch = originalFetch;
   }
