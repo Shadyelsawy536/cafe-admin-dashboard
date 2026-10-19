@@ -169,6 +169,12 @@ jobs:
             if not has_function_privilege('anon', to_regprocedure('public.register_customer_push_device(uuid,text,text)'), 'EXECUTE') then
               raise exception 'FAIL: anonymous device registration was unintentionally disabled';
             end if;
+            if has_function_privilege('anon', to_regprocedure('public.place_order_with_location(uuid,uuid,text,text,public.delivery_type,text,text,public.payment_method,jsonb,text,text,timestamp with time zone,double precision,double precision)'), 'EXECUTE') then
+              raise exception 'FAIL: anon can execute the location-aware checkout RPC';
+            end if;
+            if not has_function_privilege('authenticated', to_regprocedure('public.place_order_with_location(uuid,uuid,text,text,public.delivery_type,text,text,public.payment_method,jsonb,text,text,timestamp with time zone,double precision,double precision)'), 'EXECUTE') then
+              raise exception 'FAIL: authenticated cannot execute the location-aware checkout RPC';
+            end if;
             if has_function_privilege('authenticated', to_regprocedure('public.broadcast_order_changes()'), 'EXECUTE') then
               raise exception 'FAIL: authenticated can execute trigger-only broadcast function';
             end if;
