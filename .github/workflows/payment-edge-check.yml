@@ -27,3 +27,6 @@ jobs:
 
       - name: Type-check payment-webhook
         run: deno check --node-modules-dir=none supabase/functions/payment-webhook/index.ts
+
+      - name: Test webhook event idempotency regression
+        run: deno test supabase/functions/payment-webhook/_shared/event-idempotency_test.ts
