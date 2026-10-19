@@ -23,7 +23,7 @@ jobs:
           deno-version: v2.x
 
       - name: Type-check create-payment
-        run: deno check supabase/functions/create-payment/index.ts
+        run: deno check --node-modules-dir=none supabase/functions/create-payment/index.ts
 
       - name: Type-check payment-webhook
-        run: deno check supabase/functions/payment-webhook/index.ts
+        run: deno check --node-modules-dir=none supabase/functions/payment-webhook/index.ts
