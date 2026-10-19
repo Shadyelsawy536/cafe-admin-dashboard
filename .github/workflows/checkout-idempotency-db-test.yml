@@ -120,7 +120,8 @@ jobs:
             p_customer_phone text, p_delivery_type public.delivery_type,
             p_delivery_address text, p_pickup_branch text,
             p_payment_method public.payment_method, p_items jsonb,
-            p_coupon_code text, p_customer_notes text, p_scheduled_for timestamptz
+            p_coupon_code text default null, p_customer_notes text default '',
+            p_scheduled_for timestamptz default null
           ) returns uuid language plpgsql as $stub$
           declare v_id uuid;
           begin
