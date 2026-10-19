@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { decryptJson } from "./_shared/crypto.ts";
 import { getProvider } from "./_shared/registry.ts";
+import { isDuplicateProcessedEvent } from "./_shared/event-idempotency.ts";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -169,7 +170,7 @@ Deno.serve(async (req: Request) => {
       .eq("provider_event_id", result.providerEventId)
       .maybeSingle();
 
-    if (existingEvent?.processed && existingEvent.event_type !== "created") {
+    if (isDuplicateProcessedEvent(existingEvent)) {
       return json({ received: true, duplicate: true });
     }
 
