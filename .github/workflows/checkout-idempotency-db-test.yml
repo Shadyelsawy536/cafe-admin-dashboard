@@ -42,6 +42,8 @@ jobs:
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: safety/order-checkout-hardening
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
