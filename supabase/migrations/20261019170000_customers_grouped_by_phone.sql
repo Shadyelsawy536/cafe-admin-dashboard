@@ -5,7 +5,8 @@ returns table(
   phone text,
   order_count bigint,
   total_spent numeric,
-  last_order_at timestamptz
+  last_order_at timestamptz,
+  customer_key text
 )
 language sql
 stable
@@ -34,7 +35,12 @@ as $function$
       (array_agg(id order by created_at asc, id))[1] as customer_id,
       (array_agg(full_name order by created_at desc, id desc))[1] as profile_name,
       (array_agg(phone order by created_at desc, id desc))[1] as profile_phone
-    from profile_rows
+    from profile_rows p
+    where not exists (
+      select 1 from public.orders existing_order
+      where existing_order.restaurant_id = p.restaurant_id
+        and existing_order.customer_id = p.id
+    )
     group by group_key
   ),
   order_rows as (
@@ -81,7 +87,8 @@ as $function$
     coalesce(og.latest_order_phone, pg.profile_phone, '') as phone,
     coalesce(og.order_count, 0)::bigint as order_count,
     coalesce(og.total_spent, 0)::numeric as total_spent,
-    og.last_order_at
+    og.last_order_at,
+    k.group_key as customer_key
   from all_keys k
   left join profile_groups pg using (group_key)
   left join order_groups og using (group_key)
