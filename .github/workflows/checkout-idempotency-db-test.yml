@@ -1,0 +1,235 @@
+name: Checkout idempotency database test
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/20261019152000_add_checkout_idempotency_rpc.sql"
+      - ".github/workflows/checkout-idempotency-db-test.yml"
+  push:
+    branches:
+      - "test/checkout-idempotency-github-actions"
+    paths:
+      - "supabase/migrations/20261019152000_add_checkout_idempotency_rpc.sql"
+      - ".github/workflows/checkout-idempotency-db-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-idempotency:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: checkout_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d checkout_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGDATABASE: checkout_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Prepare isolated Supabase-like test schema
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          create extension if not exists pgcrypto;
+          create role anon nologin;
+          create role authenticated nologin;
+          create schema auth;
+          create schema private;
+
+          create type public.delivery_type as enum ('delivery', 'pickup');
+          create type public.payment_method as enum ('cash', 'card');
+
+          create table public.customers (
+            id uuid primary key,
+            user_id uuid not null,
+            restaurant_id uuid not null
+          );
+
+          create table public.orders (
+            id uuid primary key default gen_random_uuid()
+          );
+
+          create function auth.uid()
+          returns uuid
+          language sql stable
+          as $$
+            select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+          $$;
+
+          -- Test double for the existing production RPC. This validates the new
+          -- wrapper's retry/locking behavior without touching production or payments.
+          create function public.place_order_with_location(
+            p_restaurant_id uuid,
+            p_customer_id uuid,
+            p_customer_name text,
+            p_customer_phone text,
+            p_delivery_type public.delivery_type,
+            p_delivery_address text,
+            p_pickup_branch text,
+            p_payment_method public.payment_method,
+            p_items jsonb,
+            p_coupon_code text,
+            p_customer_notes text,
+            p_scheduled_for timestamptz,
+            p_latitude double precision,
+            p_longitude double precision
+          )
+          returns uuid
+          language plpgsql
+          as $$
+          declare
+            v_id uuid;
+          begin
+            insert into public.orders default values returning id into v_id;
+            return v_id;
+          end;
+          $$;
+
+          insert into public.customers(id, user_id, restaurant_id)
+          values (
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+          );
+          SQL
+
+      - name: Apply checkout idempotency migration to isolated database
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019152000_add_checkout_idempotency_rpc.sql
+
+      - name: Verify retry, payload mismatch, and distinct checkout behavior
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          set request.jwt.claim.sub = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+          do $$
+          declare
+            v_first uuid;
+            v_retry uuid;
+            v_other uuid;
+            v_orders bigint;
+            v_rejected boolean := false;
+          begin
+            v_first := public.place_order_with_location_idempotent(
+              'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+              'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              'Test Customer',
+              '01000000000',
+              'delivery',
+              'Test address',
+              null,
+              'cash',
+              '[{"product_id":"test-product","quantity":1}]'::jsonb,
+              null,
+              '',
+              null,
+              null,
+              null
+            );
+
+            v_retry := public.place_order_with_location_idempotent(
+              'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+              'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              'Test Customer',
+              '01000000000',
+              'delivery',
+              'Test address',
+              null,
+              'cash',
+              '[{"product_id":"test-product","quantity":1}]'::jsonb,
+              null,
+              '',
+              null,
+              null,
+              null
+            );
+
+            if v_first is distinct from v_retry then
+              raise exception 'FAIL: retry returned a different order ID';
+            end if;
+
+            select count(*) into v_orders from public.orders;
+            if v_orders <> 1 then
+              raise exception 'FAIL: expected exactly one order after retry, got %', v_orders;
+            end if;
+
+            begin
+              perform public.place_order_with_location_idempotent(
+                'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+                'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                'Test Customer',
+                '01000000000',
+                'delivery',
+                'Changed address',
+                null,
+                'cash',
+                '[{"product_id":"test-product","quantity":1}]'::jsonb,
+                null,
+                '',
+                null,
+                null,
+                null
+              );
+            exception when others then
+              if sqlerrm like '%different order request%' then
+                v_rejected := true;
+              else
+                raise;
+              end if;
+            end;
+
+            if not v_rejected then
+              raise exception 'FAIL: same key with changed payload was not rejected';
+            end if;
+
+            v_other := public.place_order_with_location_idempotent(
+              'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+              'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              'Test Customer',
+              '01000000000',
+              'delivery',
+              'Another address',
+              null,
+              'cash',
+              '[{"product_id":"test-product","quantity":1}]'::jsonb,
+              null,
+              '',
+              null,
+              null,
+              null
+            );
+
+            if v_other = v_first then
+              raise exception 'FAIL: a distinct checkout key reused the previous order';
+            end if;
+
+            select count(*) into v_orders from public.orders;
+            if v_orders <> 2 then
+              raise exception 'FAIL: expected exactly two orders after distinct checkout, got %', v_orders;
+            end if;
+
+            raise notice 'PASS: same-key retry is idempotent; payload changes are rejected; new key creates a new order';
+          end;
+          $$;
+          SQL
