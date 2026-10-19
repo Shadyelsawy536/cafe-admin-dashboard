@@ -112,6 +112,7 @@ jobs:
             v_first := public.place_order_with_location_idempotent(
               'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
               'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
               'Test Customer', '01000000000', 'pickup', 'Test address', null,
               'cash', '[{"product_id":"test-product","quantity":1}]'::jsonb,
               null, '', null, null, null
@@ -120,6 +121,7 @@ jobs:
             v_retry := public.place_order_with_location_idempotent(
               'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
               'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
               'Test Customer', '01000000000', 'pickup', 'Test address', null,
               'cash', '[{"product_id":"test-product","quantity":1}]'::jsonb,
               null, '', null, null, null
@@ -157,6 +159,7 @@ jobs:
             v_other := public.place_order_with_location_idempotent(
               'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
               'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
               'Test Customer', '01000000000', 'pickup', 'Another address', null,
               'cash', '[{"product_id":"test-product","quantity":1}]'::jsonb,
               null, '', null, null, null
