@@ -1,0 +1,38 @@
+name: Payment Edge Function checks
+
+on:
+  pull_request:
+    paths:
+      - "supabase/functions/create-payment/**"
+      - "supabase/functions/payment-webhook/**"
+      - ".github/workflows/payment-edge-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deno-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check create-payment
+        run: deno check --node-modules-dir=none supabase/functions/create-payment/index.ts
+
+      - name: Type-check payment-webhook
+        run: deno check --node-modules-dir=none supabase/functions/payment-webhook/index.ts
+
+      - name: Test webhook event idempotency regression
+        run: deno test supabase/functions/payment-webhook/_shared/event-idempotency_test.ts
+
+      - name: Test Fawry checkout and webhook signatures
+        run: deno test supabase/functions/create-payment/_shared/providers/fawry_test.ts
+
+      - name: Test Paymob payment reference contract
+        run: deno test supabase/functions/create-payment/_shared/providers/paymob_test.ts
