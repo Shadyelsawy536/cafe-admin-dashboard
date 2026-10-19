@@ -30,3 +30,6 @@ jobs:
 
       - name: Test webhook event idempotency regression
         run: deno test supabase/functions/payment-webhook/_shared/event-idempotency_test.ts
+
+      - name: Test Fawry checkout and webhook signatures
+        run: deno test supabase/functions/create-payment/_shared/providers/fawry_test.ts
