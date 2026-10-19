@@ -27,6 +27,9 @@ grant execute on function public.extend_subscription(uuid, integer) to authentic
 revoke execute on function public.get_audit_logs(uuid, text, integer) from public, anon;
 grant execute on function public.get_audit_logs(uuid, text, integer) to authenticated;
 
+revoke execute on function public.generate_restaurant_login_id() from public, anon;
+grant execute on function public.generate_restaurant_login_id() to authenticated;
+
 revoke execute on function public.get_platform_users() from public, anon;
 grant execute on function public.get_platform_users() to authenticated;
 
