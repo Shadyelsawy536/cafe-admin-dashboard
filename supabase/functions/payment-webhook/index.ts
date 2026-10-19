@@ -81,13 +81,57 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Missing Kashier payment reference" }, 400);
     }
     let payment: any = fawryPayment;
-    if (providerCode !== "fawry") {
+    if (providerCode === "paymob") {
+      // Paymob callbacks expose the gateway Order ID at obj.order.id. Match
+      // the exact attempt created above; never attach a delayed callback to
+      // whichever payment happens to be newest for the internal order.
+      const paymobOrderReference = String((payload as any)?.obj?.order?.id ?? "").trim();
+      if (!paymobOrderReference) return json({ error: "Missing Paymob order reference" }, 400);
+
+      const { data: exactPayment, error: exactPaymentError } = await adminClient
+        .from("payments")
+        .select("id, status, amount, currency, tenant_payment_account_id, provider_order_reference")
+        .eq("order_id", order.id)
+        .eq("provider_order_reference", paymobOrderReference)
+        .maybeSingle();
+      if (exactPaymentError) throw exactPaymentError;
+      payment = exactPayment;
+
+      // Backward compatibility for payment attempts created before the exact
+      // Paymob reference was persisted. Use this only if one Paymob attempt
+      // exists for the order; multiple candidates fail closed instead of
+      // risking a wrong payment being marked paid.
+      if (!payment) {
+        const { data: candidates, error: candidatesError } = await adminClient
+          .from("payments")
+          .select("id, status, amount, currency, tenant_payment_account_id, provider_order_reference")
+          .eq("order_id", order.id);
+        if (candidatesError) throw candidatesError;
+        const matching = [];
+        for (const candidate of candidates ?? []) {
+          const { data: candidateAccount, error: candidateAccountError } = await adminClient
+            .from("tenant_payment_accounts")
+            .select("id, payment_providers(code)")
+            .eq("id", candidate.tenant_payment_account_id)
+            .eq("restaurant_id", order.restaurant_id)
+            .maybeSingle();
+          if (candidateAccountError) throw candidateAccountError;
+          const candidateCode = (candidateAccount?.payment_providers as unknown as { code: string } | null)?.code;
+          if (candidateCode === "paymob") matching.push(candidate);
+        }
+        if (matching.length === 1) payment = matching[0];
+        else if (matching.length > 1) {
+          return json({ error: "Ambiguous Paymob payment attempt; exact reference did not match" }, 409);
+        }
+      }
+    } else if (providerCode !== "fawry") {
       let paymentQuery = adminClient.from("payments").select("id, status, amount, currency, tenant_payment_account_id, provider_order_reference").eq("order_id", order.id);
       if (providerCode === "kashier") {
         if (internalPaymentId) paymentQuery = paymentQuery.eq("id", internalPaymentId);
         else paymentQuery = paymentQuery.eq("provider_order_reference", providerOrderReference);
       }
-      const { data: selectedPayment } = await paymentQuery.order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const { data: selectedPayment, error: selectedPaymentError } = await paymentQuery.order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (selectedPaymentError) throw selectedPaymentError;
       payment = selectedPayment;
 
       // Some Kashier test notifications return a gateway-generated orderReference
@@ -95,21 +139,23 @@ Deno.serve(async (req: Request) => {
       // Fall back only when there is exactly one pending attempt for this order
       // using this same provider account; never guess between multiple attempts.
       if (!payment && providerCode === "kashier" && !internalPaymentId) {
-        const { data: candidates } = await adminClient
+        const { data: candidates, error: candidatesError } = await adminClient
           .from("payments")
           .select("id, status, tenant_payment_account_id, provider_order_reference")
           .eq("order_id", order.id)
           .eq("status", "pending")
           .order("created_at", { ascending: false })
           .limit(5);
+        if (candidatesError) throw candidatesError;
         const matching = [];
         for (const candidate of candidates ?? []) {
-          const { data: candidateAccount } = await adminClient
+          const { data: candidateAccount, error: candidateAccountError } = await adminClient
             .from("tenant_payment_accounts")
             .select("id, payment_providers(code)")
             .eq("id", candidate.tenant_payment_account_id)
             .eq("restaurant_id", order.restaurant_id)
             .maybeSingle();
+          if (candidateAccountError) throw candidateAccountError;
           const candidateCode = (candidateAccount?.payment_providers as unknown as { code: string } | null)?.code;
           if (candidateCode === providerCode) matching.push(candidate);
         }
