@@ -58,6 +58,7 @@ jobs:
           create type public.delivery_type as enum ('delivery', 'pickup');
           create type public.payment_method as enum ('cash', 'card');
           create type public.discount_type as enum ('percentage', 'fixed');
+          create type public.restaurant_status as enum ('active', 'inactive');
 
           create table public.customers (
             id uuid primary key,
@@ -115,6 +116,66 @@ jobs:
 
       - name: Apply checkout hardening migration to isolated database
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019150000_harden_order_checkout.sql
+
+      - name: Prepare isolated RPC permission fixtures
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          create function public.broadcast_order_changes() returns trigger language plpgsql as $ begin return null; end; $;
+          create function public.broadcast_order_realtime() returns trigger language plpgsql as $ begin return null; end; $;
+          create function public.get_platform_analytics() returns jsonb language sql as $ select '{}'::jsonb $;
+          create function public.cancel_subscription(uuid, boolean, text) returns void language plpgsql as $ begin return; end; $;
+          create function public.change_subscription_plan(uuid, uuid) returns void language plpgsql as $ begin return; end; $;
+          create function public.create_restaurant_full(text, text, uuid, text, text, text) returns jsonb language sql as $ select '{}'::jsonb $;
+          create function public.create_restaurant_full(text, text, uuid, text, text, text, text) returns jsonb language sql as $ select '{}'::jsonb $;
+          create function public.extend_subscription(uuid, integer) returns void language plpgsql as $ begin return; end; $;
+          create function public.get_audit_logs(uuid, text, integer) returns jsonb language sql as $ select '{}'::jsonb $;
+          create function public.generate_restaurant_login_id() returns text language sql as $ select '000000'::text $;
+          create function public.get_platform_users() returns jsonb language sql as $ select '{}'::jsonb $;
+          create function public.get_restaurant_details(uuid) returns jsonb language sql as $ select '{}'::jsonb $;
+          create function public.get_system_health() returns jsonb language sql as $ select '{}'::jsonb $;
+          create function public.remove_platform_user(uuid) returns void language plpgsql as $ begin return; end; $;
+          create function public.set_restaurant_status(uuid, public.restaurant_status, text) returns void language plpgsql as $ begin return; end; $;
+          create function public.update_restaurant_login_id(uuid, text) returns void language plpgsql as $ begin return; end; $;
+          create function public.cancel_order(uuid) returns void language plpgsql as $ begin return; end; $;
+          create function public.set_order_metadata(uuid, text, timestamptz) returns void language plpgsql as $ begin return; end; $;
+          create function public.register_customer_push_device(uuid, text, text) returns void language plpgsql as $ begin return; end; $;
+          create function private.is_restaurant_active(uuid) returns boolean language sql as $ select true $;
+          create function public.get_restaurant_availability(uuid) returns jsonb language sql as $ select '{}'::jsonb $;
+          create function public.get_feature_flag(uuid, text) returns boolean language sql as $ select false $;
+          SQL
+
+      - name: Apply RPC permission hardening migration to isolated database
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019151000_restrict_sensitive_rpc_grants.sql
+
+      - name: Verify RPC permissions in isolated database
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          do $
+          begin
+            if has_function_privilege('anon', to_regprocedure('public.get_platform_analytics()'), 'EXECUTE') then
+              raise exception 'FAIL: anon can execute platform analytics';
+            end if;
+            if not has_function_privilege('authenticated', to_regprocedure('public.get_platform_analytics()'), 'EXECUTE') then
+              raise exception 'FAIL: authenticated cannot execute platform analytics';
+            end if;
+            if has_function_privilege('anon', to_regprocedure('public.place_order(uuid,uuid,text,text,public.delivery_type,text,text,public.payment_method,jsonb,text,text,timestamp with time zone)'), 'EXECUTE') then
+              raise exception 'FAIL: anon can execute the extended place_order overload';
+            end if;
+            if not has_function_privilege('authenticated', to_regprocedure('public.place_order(uuid,uuid,text,text,public.delivery_type,text,text,public.payment_method,jsonb,text,text,timestamp with time zone)'), 'EXECUTE') then
+              raise exception 'FAIL: authenticated cannot execute the extended place_order overload';
+            end if;
+            if not has_function_privilege('anon', to_regprocedure('public.register_customer_push_device(uuid,text,text)'), 'EXECUTE') then
+              raise exception 'FAIL: anonymous device registration was unintentionally disabled';
+            end if;
+            if has_function_privilege('authenticated', to_regprocedure('public.broadcast_order_changes()'), 'EXECUTE') then
+              raise exception 'FAIL: authenticated can execute trigger-only broadcast function';
+            end if;
+          end;
+          $;
+          SQL
+
+      - name: Pin security-sensitive function search paths in isolated database
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019153000_pin_function_search_paths.sql
 
       - name: Apply checkout idempotency migration to isolated database
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019152000_add_checkout_idempotency_rpc.sql
