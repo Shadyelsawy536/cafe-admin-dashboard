@@ -80,6 +80,7 @@ export class FawryProvider implements PaymentProvider {
         merchantRefNum,
         customerName: params.customerName || undefined,
         customerMobile: params.customerPhone || undefined,
+        language: credentials.language?.trim().toLowerCase() === "en-gb" ? "en-gb" : "ar-eg",
         chargeItems,
         returnUrl: params.redirectionUrl,
         orderWebHookUrl: params.notificationUrl,
