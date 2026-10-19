@@ -7,6 +7,8 @@ revoke execute on function public.broadcast_order_changes() from public, anon, a
 revoke execute on function public.broadcast_order_realtime() from public, anon, authenticated;
 
 -- Admin-only RPCs: authenticated callers still pass the function's own platform-admin check.
+revoke execute on function public.get_platform_analytics() from public, anon;
+grant execute on function public.get_platform_analytics() to authenticated;
 revoke execute on function public.cancel_subscription(uuid, boolean, text) from public, anon;
 grant execute on function public.cancel_subscription(uuid, boolean, text) to authenticated;
 
@@ -50,8 +52,9 @@ grant execute on function public.cancel_order(uuid) to authenticated;
 revoke execute on function public.set_order_metadata(uuid, text, timestamp with time zone) from public, anon;
 grant execute on function public.set_order_metadata(uuid, text, timestamp with time zone) to authenticated;
 
-revoke execute on function public.register_customer_push_device(uuid, text, text) from public, anon;
-grant execute on function public.register_customer_push_device(uuid, text, text) to authenticated;
+-- Anonymous startup intentionally registers unclaimed device tokens; the function body prevents anonymous callers from taking ownership of another user's token.
+revoke execute on function public.register_customer_push_device(uuid, text, text) from public;
+grant execute on function public.register_customer_push_device(uuid, text, text) to anon, authenticated;
 
 -- Both order RPC overloads validate auth.uid() and customer ownership internally.
 revoke execute on function public.place_order(uuid, uuid, text, text, public.delivery_type, text, text, public.payment_method, jsonb, text) from public, anon;
