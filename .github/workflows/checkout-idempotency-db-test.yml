@@ -152,7 +152,7 @@ jobs:
       - name: Verify RPC permissions in isolated database
         run: |
           psql -v ON_ERROR_STOP=1 <<'SQL'
-          do $
+          do $check$
           begin
             if has_function_privilege('anon', to_regprocedure('public.get_platform_analytics()'), 'EXECUTE') then
               raise exception 'FAIL: anon can execute platform analytics';
@@ -173,7 +173,7 @@ jobs:
               raise exception 'FAIL: authenticated can execute trigger-only broadcast function';
             end if;
           end;
-          $;
+          $check$;
           SQL
 
       - name: Pin security-sensitive function search paths in isolated database
