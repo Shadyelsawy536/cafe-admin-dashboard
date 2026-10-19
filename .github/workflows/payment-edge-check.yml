@@ -33,3 +33,6 @@ jobs:
 
       - name: Test Fawry checkout and webhook signatures
         run: deno test supabase/functions/create-payment/_shared/providers/fawry_test.ts
+
+      - name: Test Paymob payment reference contract
+        run: deno test supabase/functions/create-payment/_shared/providers/paymob_test.ts
