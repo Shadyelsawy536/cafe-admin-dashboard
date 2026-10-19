@@ -195,14 +195,14 @@ Deno.serve(async (req: Request) => {
     // If the order update fails, the event stays unprocessed and a provider retry
     // can safely repeat the idempotent payment/order updates.
     if (result.status === "paid") {
+      // Do not rewrite the order status here: the restaurant may have already
+      // advanced it, or it may have been cancelled while payment was in flight.
+      // Only record the verified payment flag; a failed write must keep this
+      // webhook retryable.
       const { error: orderUpdateError } = await adminClient
         .from("orders")
-        .update({
-          status: "pending",
-          payment_verified: true,
-        })
-        .eq("id", order.id)
-        .eq("status", "pending");
+        .update({ payment_verified: true })
+        .eq("id", order.id);
 
       if (orderUpdateError) throw orderUpdateError;
     }
