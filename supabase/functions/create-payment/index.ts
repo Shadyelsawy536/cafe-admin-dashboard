@@ -119,6 +119,30 @@ Deno.serve(async (req: Request) => {
       throw providerError;
     }
 
+    // Paymob callbacks expose the Paymob order ID as obj.order.id. Persist that
+    // exact per-attempt reference so a delayed callback can never be attached
+    // to a newer payment attempt for the same internal order.
+    if (providerCode === "paymob") {
+      if (!result.providerPaymentId) {
+        await adminClient.from("payments").update({
+          status: "failed",
+          failure_reason: "Paymob did not return an order reference",
+        }).eq("id", payment.id);
+        return json({ error: "Paymob did not return a payment reference" }, 502);
+      }
+      const { error: referenceError } = await adminClient
+        .from("payments")
+        .update({ provider_order_reference: result.providerPaymentId })
+        .eq("id", payment.id);
+      if (referenceError) {
+        await adminClient.from("payments").update({
+          status: "failed",
+          failure_reason: "Could not persist Paymob payment reference",
+        }).eq("id", payment.id);
+        throw referenceError;
+      }
+    }
+
     // The Order System never sees provider details beyond this point — it only gets a checkout URL back.
 
     await adminClient.from("payment_events").insert({
