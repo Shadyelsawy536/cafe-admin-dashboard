@@ -56,9 +56,9 @@ jobs:
           create schema private;
 
           create type public.delivery_type as enum ('delivery', 'pickup');
-          create type public.payment_method as enum ('cash', 'card');
+          create type public.payment_method as enum ('cash', 'visa');
           create type public.discount_type as enum ('percentage', 'fixed');
-          create type public.restaurant_status as enum ('active', 'inactive');
+          create type public.restaurant_status as enum ('trial', 'active', 'suspended', 'inactive');
 
           create table public.customers (
             id uuid primary key,
