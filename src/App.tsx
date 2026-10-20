@@ -1,22 +1,31 @@
-import type { ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Layout } from './components/Layout';
-import { Login } from './pages/Login';
-import { Overview } from './pages/Overview';
-import { Orders } from './pages/Orders';
-import { Categories } from './pages/Categories';
-import { ModifierGroups } from './pages/ModifierGroups';
-import { Products } from './pages/Products';
-import { Reports } from './pages/Reports';
-import { Settings } from './pages/Settings';
-import { WebsiteSettings } from './pages/WebsiteSettings';
-import DeliveryZones from './pages/DeliveryZones';
-import { StaffPermissions } from './pages/StaffPermissions';
-import { OffersCoupons } from './pages/OffersCoupons';
-import { Customers } from './pages/Customers';
-import { Notifications } from './pages/Notifications';
-import { Payments } from './pages/Payments';
+
+const Login = lazy(() => import('./pages/Login').then((m) => ({ default: m.Login })));
+const Overview = lazy(() => import('./pages/Overview').then((m) => ({ default: m.Overview })));
+const Orders = lazy(() => import('./pages/Orders').then((m) => ({ default: m.Orders })));
+const Categories = lazy(() => import('./pages/Categories').then((m) => ({ default: m.Categories })));
+const ModifierGroups = lazy(() => import('./pages/ModifierGroups').then((m) => ({ default: m.ModifierGroups })));
+const Products = lazy(() => import('./pages/Products').then((m) => ({ default: m.Products })));
+const Reports = lazy(() => import('./pages/Reports').then((m) => ({ default: m.Reports })));
+const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
+const WebsiteSettings = lazy(() => import('./pages/WebsiteSettings').then((m) => ({ default: m.WebsiteSettings })));
+const DeliveryZones = lazy(() => import('./pages/DeliveryZones').then((m) => ({ default: m.default })));
+const StaffPermissions = lazy(() => import('./pages/StaffPermissions').then((m) => ({ default: m.StaffPermissions })));
+const OffersCoupons = lazy(() => import('./pages/OffersCoupons').then((m) => ({ default: m.OffersCoupons })));
+const Customers = lazy(() => import('./pages/Customers').then((m) => ({ default: m.Customers })));
+const Notifications = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.Notifications })));
+const Payments = lazy(() => import('./pages/Payments').then((m) => ({ default: m.Payments })));
+
+function PageFallback() {
+  return <div className="flex min-h-40 items-center justify-center p-8 text-sm text-ink/50">Loading page…</div>;
+}
+
+function page(element: ReactNode) {
+  return <Suspense fallback={<PageFallback />}>{element}</Suspense>;
+}
 
 function ProtectedShell() {
   const { user, roleName, loading } = useAuth();
@@ -26,9 +35,8 @@ function ProtectedShell() {
   return <Layout />;
 }
 
-// Route-level guard: even though the nav already hides links a role can't
-// use, someone could still navigate to the URL directly. This blocks that,
-// mirroring the same permission the RLS policies now enforce server-side.
+// Keep route-level permission checks intact: the lazy page isn't rendered until
+// the current role passes the same permission guard as before.
 function RequirePermission({ permission, children }: { permission: string; children: ReactNode }) {
   const { hasPermission } = useAuth();
   if (!hasPermission(permission)) {
@@ -40,22 +48,22 @@ function RequirePermission({ permission, children }: { permission: string; child
 export default function App() {
   return <AuthProvider><BrowserRouter>
   <Routes>
-    <Route path="/login" element={<Login />} />
+    <Route path="/login" element={page(<Login />)} />
     <Route element={<ProtectedShell />}>
-    <Route path="/" element={<Overview />} />
-    <Route path="/orders" element={<RequirePermission permission="orders.view"><Orders /></RequirePermission>} />
-    <Route path="/products" element={<RequirePermission permission="menu.manage"><Products /></RequirePermission>} />
-    <Route path="/categories" element={<RequirePermission permission="menu.manage"><Categories /></RequirePermission>} />
-    <Route path="/modifier-groups" element={<RequirePermission permission="menu.manage"><ModifierGroups /></RequirePermission>} />
-    <Route path="/reports" element={<RequirePermission permission="reports.view"><Reports /></RequirePermission>} />
-    <Route path="/settings" element={<RequirePermission permission="settings.manage"><Settings /></RequirePermission>} />
-    <Route path="/website" element={<RequirePermission permission="settings.manage"><WebsiteSettings /></RequirePermission>} />
-    <Route path="/delivery-zones" element={<RequirePermission permission="settings.manage"><DeliveryZones /></RequirePermission>} />
-    <Route path="/staff" element={<RequirePermission permission="staff.manage"><StaffPermissions /></RequirePermission>} />
-    <Route path="/offers-coupons" element={<RequirePermission permission="offers.manage"><OffersCoupons /></RequirePermission>} />
-    <Route path="/customers" element={<RequirePermission permission="customers.view"><Customers /></RequirePermission>} />
-    <Route path="/notifications" element={<RequirePermission permission="settings.manage"><Notifications /></RequirePermission>} />
-    <Route path="/payments" element={<Payments />} />
+    <Route path="/" element={page(<Overview />)} />
+    <Route path="/orders" element={<RequirePermission permission="orders.view">{page(<Orders />)}</RequirePermission>} />
+    <Route path="/products" element={<RequirePermission permission="menu.manage">{page(<Products />)}</RequirePermission>} />
+    <Route path="/categories" element={<RequirePermission permission="menu.manage">{page(<Categories />)}</RequirePermission>} />
+    <Route path="/modifier-groups" element={<RequirePermission permission="menu.manage">{page(<ModifierGroups />)}</RequirePermission>} />
+    <Route path="/reports" element={<RequirePermission permission="reports.view">{page(<Reports />)}</RequirePermission>} />
+    <Route path="/settings" element={<RequirePermission permission="settings.manage">{page(<Settings />)}</RequirePermission>} />
+    <Route path="/website" element={<RequirePermission permission="settings.manage">{page(<WebsiteSettings />)}</RequirePermission>} />
+    <Route path="/delivery-zones" element={<RequirePermission permission="settings.manage">{page(<DeliveryZones />)}</RequirePermission>} />
+    <Route path="/staff" element={<RequirePermission permission="staff.manage">{page(<StaffPermissions />)}</RequirePermission>} />
+    <Route path="/offers-coupons" element={<RequirePermission permission="offers.manage">{page(<OffersCoupons />)}</RequirePermission>} />
+    <Route path="/customers" element={<RequirePermission permission="customers.view">{page(<Customers />)}</RequirePermission>} />
+    <Route path="/notifications" element={<RequirePermission permission="settings.manage">{page(<Notifications />)}</RequirePermission>} />
+    <Route path="/payments" element={page(<Payments />)} />
     </Route><Route path="*" element={<Navigate to="/" replace />} />
   </Routes></BrowserRouter></AuthProvider>;
 }
