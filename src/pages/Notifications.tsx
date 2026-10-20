@@ -67,8 +67,7 @@ export function Notifications() {
     <div className="p-8">
       <h1 className="font-display text-2xl font-semibold text-ink">Notifications</h1>
       <p className="mt-1 text-sm text-ink/60">
-        Order-status notifications are logged automatically. <strong>Note: this records notifications but doesn't yet deliver real push
-        notifications</strong> — that needs a separate FCM/APNs integration, not built yet.
+        Review order-status notifications and manage notification campaigns.
       </p>
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
