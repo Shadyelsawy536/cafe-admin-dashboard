@@ -188,8 +188,7 @@ export function OffersCoupons() {
       <div className="flex-1 overflow-y-auto p-8">
         <h1 className="font-display text-2xl font-semibold text-ink">Offers & Coupons</h1>
         <p className="mt-1 text-sm text-ink/60">
-          Coupons are code-based and applied at checkout in the app. Offers are auto-applied promotions —{' '}
-          <strong>note: management here is live, but automatic offer application at checkout isn't wired into the order flow yet</strong> — only coupon codes are currently honored by place_order.
+          Manage discount coupons and promotional offers for your restaurant.
         </p>
 
         <div className="mt-6 flex gap-2">
