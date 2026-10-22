@@ -11,12 +11,13 @@ const LOGIN_ID_STORAGE_KEY = 'cafe_dashboard_login_id';
 interface MembershipRow {
   restaurant_id: string;
   roles: { name: string; role_permissions: { permissions: { key: string } }[] } | null;
-  restaurants: { login_id: string | null } | null;
+  restaurants: { name: string | null; login_id: string | null } | null;
 }
 
 interface AuthState {
   user: User | null;
   roleName: string | null;
+  restaurantName: string | null;
   permissions: Set<string>;
   hasPermission: (key: string) => boolean;
   loading: boolean;
@@ -32,6 +33,7 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [roleName, setRoleName] = useState<string | null>(null);
+  const [restaurantName, setRestaurantName] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,12 +43,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function applyMembership(row: MembershipRow) {
     setRestaurantId(row.restaurant_id);
+    setRestaurantName(row.restaurants?.name?.trim() || null);
     setRoleName(row.roles?.name ?? null);
     setPermissions(new Set((row.roles?.role_permissions ?? []).map((rp) => rp.permissions.key)));
   }
 
   function clearMembership() {
     setRestaurantId(null);
+    setRestaurantName(null);
     setRoleName(null);
     setPermissions(new Set());
   }
@@ -71,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<{ matched: boolean }> {
     const { data } = await supabase
       .from('restaurant_users')
-      .select('restaurant_id, roles(name, role_permissions(permissions(key))), restaurants(login_id)')
+      .select('restaurant_id, roles(name, role_permissions(permissions(key))), restaurants(name, login_id)')
       .eq('user_id', currentUser.id);
 
     const rows = (data ?? []) as unknown as MembershipRow[];
@@ -106,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!result.matched) {
             supabase
               .from('restaurant_users')
-              .select('restaurant_id, roles(name, role_permissions(permissions(key))), restaurants(login_id)')
+              .select('restaurant_id, roles(name, role_permissions(permissions(key))), restaurants(name, login_id)')
               .eq('user_id', session.user.id)
               .limit(1)
               .maybeSingle()
@@ -175,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         roleName,
+        restaurantName,
         permissions,
         hasPermission,
         loading,
