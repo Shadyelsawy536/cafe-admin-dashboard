@@ -249,7 +249,7 @@ export function Layout() {
         <div className="flex items-center gap-2 border-b border-line px-6 py-5">
           <span className="min-w-0 truncate font-display text-lg font-semibold tracking-tight" title={restaurantName || 'Restaurant'}>{restaurantName || 'Restaurant'}</span>
           <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
-            Admin
+            HubDine
           </span>
         </div>
 
