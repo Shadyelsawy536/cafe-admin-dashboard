@@ -362,7 +362,6 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
               </div>
               <SalesTrendChart
                 daily={report.daily}
-                orders={analyticsOrders}
                 currency={currency}
                 view={trendView}
                 formatCurrency={formatCurrency}
@@ -460,10 +459,9 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
 
 
 function SalesTrendChart({
-  daily, orders, currency, view, formatCurrency: format,
+  daily, currency, view, formatCurrency: format,
 }: {
   daily: DailySales[];
-  orders: AnalyticsOrder[];
   currency: string;
   view: 'day' | 'week' | 'month';
   formatCurrency: (amount: number, currency: string) => string;
