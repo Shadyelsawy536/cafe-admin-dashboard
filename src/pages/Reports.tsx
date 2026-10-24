@@ -125,39 +125,82 @@ export function Reports() {
     setEndDate(toDateInputValue(new Date()));
   }
 
-  function exportCsv() {
+  async function exportExcel() {
     if (!report) return;
-    const rows = [
-      ['Report', 'Sales performance'],
-      ['Start date', startDate],
-      ['End date', endDate],
-      [],
-      ['Summary'],
-      ['Total sales', report.totals.total_sales],
-      ['Total orders', report.totals.total_orders],
-      ['Average order value', report.totals.avg_order_value],
-      [],
-      ['Daily sales'],
-      ['Date', 'Orders', 'Revenue'],
-      ...report.daily.map(day => [day.day, day.orders, day.revenue]),
-      [],
-      ['Product sales'],
-      ['Product', 'Quantity sold', 'Revenue'],
-      ...report.products.map(product => [product.product_name, product.quantity_sold, product.revenue]),
-      [],
-      ['Category sales'],
-      ['Category', 'Quantity sold', 'Revenue'],
-      ...report.categories.map(category => [category.category_name, category.quantity_sold, category.revenue]),
+    const { start, end } = rangeBounds();
+    const breakdowns = await Promise.all(report.products.map(async (product) => {
+      const { data, error } = await supabase.rpc('get_product_breakdown', {
+        p_restaurant_id: RESTAURANT_ID,
+        p_product_id: product.product_id,
+        p_start: start.toISOString(),
+        p_end: end.toISOString(),
+      });
+      return !error && data ? { product, breakdown: data as ProductBreakdown } : null;
+    }));
+
+    const sizes = new Map<string, number>();
+    const modifiers = new Map<string, { group: string; name: string; count: number }>();
+    breakdowns.filter((item): item is NonNullable<typeof item> => item !== null).forEach(({ breakdown }) => {
+      breakdown.variants.filter(v => v.label !== 'Standard').forEach(v => sizes.set(v.label, (sizes.get(v.label) ?? 0) + Number(v.quantity_sold || 0)));
+      breakdown.modifiers.forEach(m => {
+        const key = `${m.group_name}||${m.modifier_name}`;
+        const current = modifiers.get(key);
+        modifiers.set(key, { group: m.group_name, name: m.modifier_name, count: (current?.count ?? 0) + Number(m.quantity_sold || 0) });
+      });
+    });
+
+    const esc = (value: unknown) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    type Cell = { value: unknown; numeric?: boolean; style?: number };
+    type Sheet = { name: string; rows: Cell[][] };
+    const row = (...values: unknown[]): Cell[] => values.map(value => ({ value }));
+    const heading = (title: string): Cell[] => [{ value: title, style: 1 }];
+    const tableHeader = (...values: unknown[]): Cell[] => values.map(value => ({ value, style: 2 }));
+    const sheets: Sheet[] = [
+      { name: 'Summary', rows: [
+        heading('HUBDINE · SALES REPORT'), row('Start date', startDate), row('End date', endDate), [],
+        heading('SUMMARY'), tableHeader('Metric', 'Value'),
+        row('Total sales', Number(report.totals.total_sales)), row('Total orders', Number(report.totals.total_orders)),
+        row('Average order value', Number(report.totals.avg_order_value)), row('Currency', currency),
+      ]},
+      { name: 'Daily Sales', rows: [
+        heading('DAILY SALES'), tableHeader('Date', 'Orders', `Revenue (${currency})`),
+        ...report.daily.map(day => row(day.day.slice(0, 10), Number(day.orders), Number(day.revenue))),
+      ]},
+      { name: 'Product Sales', rows: [
+        heading('PRODUCT SALES'), tableHeader('Product', 'Quantity sold', `Revenue (${currency})`),
+        ...report.products.map(p => row(p.product_name, Number(p.quantity_sold), Number(p.revenue))),
+      ]},
+      { name: 'Category Sales', rows: [
+        heading('CATEGORY SALES'), tableHeader('Category', 'Quantity sold', `Revenue (${currency})`),
+        ...report.categories.map(c => row(c.category_name, Number(c.quantity_sold), Number(c.revenue))),
+      ]},
+      { name: 'Size Sales', rows: [
+        heading('SIZE SALES'), tableHeader('Size', 'Quantity sold'),
+        ...Array.from(sizes.entries()).sort((a, b) => b[1] - a[1]).map(([name, count]) => row(name, count)),
+        ...(sizes.size ? [] : [row('No size data available for this period')]),
+      ]},
+      { name: 'Modifier Sales', rows: [
+        heading('MODIFIER SALES'), tableHeader('Modifier group', 'Selected option', 'Times selected'),
+        ...Array.from(modifiers.values()).sort((a, b) => b.count - a.count).map(m => row(m.group, m.name, m.count)),
+        ...(modifiers.size ? [] : [row('No modifier data available for this period')]),
+      ]},
     ];
-    const csv = rows.map(row => row.map(value => {
-      const text = String(value ?? '');
-      return `"${text.replace(/"/g, '""')}"`;
-    }).join(',')).join('\r\n');
-    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
+    const xmlCell = (cell: Cell) => {
+      const value = cell.value;
+      const numeric = typeof value === 'number' && Number.isFinite(value);
+      return `<Cell${cell.style ? ` ss:StyleID="s${cell.style}"` : ''}><Data ss:Type="${numeric ? 'Number' : 'String'}">${esc(value)}</Data></Cell>`;
+    };
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:html="http://www.w3.org/TR/REC-html40">
+<Styles><Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Aptos" ss:Size="10" ss:Color="#243247"/></Style><Style ss:ID="s1"><Font ss:FontName="Aptos Display" ss:Size="14" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#17365D" ss:Pattern="Solid"/><Alignment ss:Vertical="Center"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#17365D"/></Borders></Style><Style ss:ID="s2"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#4472C4" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FFFFFF"/></Borders></Style></Styles>
+${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.rows.map(cells => `<Row>${cells.map(xmlCell).join('')}</Row>`).join('')}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>2</SplitHorizontal><TopRowBottomPane>2</TopRowBottomPane><ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios></WorksheetOptions></Worksheet>`).join('')}
+</Workbook>`;
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `sales-report-${startDate}-to-${endDate}.csv`;
+    link.download = `sales-report-${startDate}-to-${endDate}.xls`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -212,7 +255,7 @@ export function Reports() {
               </button>
             ))}
           </div>
-          <button onClick={exportCsv} disabled={!report || loading} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">Export CSV</button>
+          <button onClick={() => void exportExcel()} disabled={!report || loading} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">Export Excel</button>
         </div>
 
         {loading ? (
