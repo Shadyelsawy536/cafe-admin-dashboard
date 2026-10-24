@@ -17,7 +17,6 @@ const NAV_ITEMS = [
   { to: '/staff', label: 'Staff', icon: '◐', permission: 'staff.manage' },
   { to: '/offers-coupons', label: 'Offers & Coupons', icon: '◆', permission: 'offers.manage' },
   { to: '/customers', label: 'Customers', icon: '◍', permission: 'customers.view' },
-  { to: '/notifications', label: 'Notifications', icon: '◔', permission: 'settings.manage' },
   { to: '/payments', label: 'Payments', icon: '◆', permission: 'payments.manage' },
 ] as const;
 
