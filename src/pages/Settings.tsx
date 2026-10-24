@@ -33,7 +33,7 @@ export function Settings(){
   supabase.from('restaurant_notification_settings').select('*').eq('restaurant_id',RESTAURANT_ID).maybeSingle(),
   supabase.from('payment_providers').select('id,name,slug,is_active').eq('is_active',true).order('name'),
   supabase.from('restaurant_payment_configs').select('id,payment_provider_id,is_active').eq('restaurant_id',RESTAURANT_ID)]);
-  [r,b,s,l,so,h,ru,n,p,pc].forEach(x=>x.error&&console.error(x.error));setRestaurant(r.data);setBranding(b.data);setSettings(s.data);setLocations(l.data||[]);setSocials(so.data||[]);setHours(h.data||[]);setRules(ru.data);setNotifications(n.data);setProviders(p.data||[]);setPaymentConfigs(pc.data||[]);setLoading(false)},[]);
+  [r,b,s,l,so,h,ru,n,p,pc].forEach(x=>x.error&&console.error(x.error));setRestaurant(r.data);setBranding(b.data);setSettings(s.data);setLocations(l.data||[]);setSocials(so.data||[]);setHours(h.data||[]);setRules(ru.data||{restaurant_id:RESTAURANT_ID,customer_cancellation_enabled:true,cancellation_window_minutes:5,auto_cancel_unpaid_minutes:15,require_customer_phone:true,require_delivery_address:true,allow_customer_order_notes:true,max_items_per_order:50});setNotifications(n.data||{restaurant_id:RESTAURANT_ID,new_order_push:true,new_order_email:false,order_status_push:true,promotional_push:true,low_stock_push:false,admin_email:null});setProviders(p.data||[]);setPaymentConfigs(pc.data||[]);setLoading(false)},[]);
  useEffect(()=>{load()},[load]);
  const patch=(setter:any,key:string,value:any)=>setter((v:any)=>v?{...v,[key]:value}:v);
  async function save(){if(!restaurant||!branding||!settings||!rules||!notifications)return;setSaving(true);setMessage(null);const rs=await Promise.all([
