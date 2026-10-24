@@ -90,6 +90,7 @@ export function Reports() {
   const [breakdownProduct, setBreakdownProduct] = useState<ProductSales | null>(null);
   const [breakdown, setBreakdown] = useState<ProductBreakdown | null>(null);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [showBestSellersReport, setShowBestSellersReport] = useState(false);
 
   function rangeBounds() {
     const start = new Date(startDate);
@@ -370,24 +371,55 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
             </section>
 
             <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-2xl border border-line bg-surface p-5">
-                <h2 className="text-sm font-semibold text-ink">Best-Selling Products</h2>
+              <button
+                type="button"
+                onClick={() => setShowBestSellersReport(true)}
+                className="group w-full rounded-2xl border border-line bg-surface p-5 text-left transition hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-accent/40 sm:p-6"
+                aria-label="Open full Best-Selling Products report"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">Product insights</p>
+                    <h2 className="mt-1 text-base font-semibold text-ink">Best-Selling Products</h2>
+                    <p className="mt-1 text-xs text-ink/50">Top performers for the selected period</p>
+                  </div>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent transition group-hover:bg-accent group-hover:text-white">↗</span>
+                </div>
+                <div className="mt-5 grid grid-cols-3 gap-2">
+                  <div className="rounded-xl bg-canvas p-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-ink/45">Products</p>
+                    <p className="mt-1 text-xl font-semibold tabular-nums text-ink">{report.products.length}</p>
+                  </div>
+                  <div className="rounded-xl bg-canvas p-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-ink/45">Units sold</p>
+                    <p className="mt-1 text-xl font-semibold tabular-nums text-ink">{report.products.reduce((sum, p) => sum + Number(p.quantity_sold || 0), 0)}</p>
+                  </div>
+                  <div className="rounded-xl bg-canvas p-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-ink/45">Top seller</p>
+                    <p className="mt-1 truncate text-sm font-semibold text-ink">{report.products[0]?.product_name ?? '—'}</p>
+                  </div>
+                </div>
                 <div className="mt-4 space-y-3">
                   {report.products.length === 0 && <p className="text-xs text-ink/40">No sales in this period.</p>}
-                  {report.products.map((p) => (
-                    <button key={p.product_id} onClick={() => openBreakdown(p)} className="block w-full text-left">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium text-ink">{p.product_name}</span>
-                        <span className="font-mono tabular-nums text-ink/70">{formatCurrency(Number(p.revenue), currency)}</span>
+                  {report.products.slice(0, 3).map((p, index) => (
+                    <div key={p.product_id} className="flex items-center gap-3">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-canvas text-xs font-semibold text-ink/60">{index + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                          <span className="truncate font-medium text-ink">{p.product_name}</span>
+                          <span className="shrink-0 font-mono text-xs tabular-nums text-ink/70">{formatCurrency(Number(p.revenue), currency)}</span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-canvas">
+                          <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${maxProductRevenue > 0 ? (Number(p.revenue) / maxProductRevenue) * 100 : 0}%` }} />
+                        </div>
                       </div>
-                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-canvas">
-                        <div className="h-full rounded-full bg-accent" style={{ width: `${maxProductRevenue > 0 ? (Number(p.revenue) / maxProductRevenue) * 100 : 0}%` }} />
-                      </div>
-                      <p className="mt-1 text-xs text-ink/40">{p.quantity_sold} sold · View Breakdown →</p>
-                    </button>
+                    </div>
                   ))}
                 </div>
-              </div>
+                <div className="mt-5 flex items-center justify-between border-t border-line pt-4 text-xs font-semibold text-accent">
+                  <span>Open full product report</span><span className="transition-transform group-hover:translate-x-1">View report →</span>
+                </div>
+              </button>
 
               <div className="rounded-2xl border border-line bg-surface p-5">
                 <h2 className="text-sm font-semibold text-ink">Sales by Category</h2>
@@ -406,6 +438,40 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
               </div>
             </div>
 
+            <section className="mt-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">Product performance</p>
+                  <h2 className="mt-1 text-base font-semibold text-ink">What customers are ordering</h2>
+                  <p className="mt-1 text-xs text-ink/50">Top products ranked by sales revenue · selected period</p>
+                </div>
+                <button type="button" onClick={() => setShowBestSellersReport(true)} className="rounded-lg border border-line px-3 py-2 text-xs font-semibold text-ink transition hover:border-accent/50 hover:text-accent">View full report ↗</button>
+              </div>
+              {report.products.length === 0 ? (
+                <p className="py-10 text-center text-sm text-ink/45">No product sales to analyze for this period.</p>
+              ) : (
+                <div className="mt-6 space-y-4">
+                  {report.products.slice(0, 8).map((p, index) => (
+                    <button key={p.product_id} type="button" onClick={() => openBreakdown(p)} className="group block w-full rounded-xl p-2 text-left transition hover:bg-canvas/70">
+                      <div className="flex items-center gap-3">
+                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${index === 0 ? 'bg-accent text-white' : 'bg-canvas text-ink/60'}`}>{String(index + 1).padStart(2, '0')}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                            <span className="truncate text-sm font-medium text-ink">{p.product_name}</span>
+                            <span className="font-mono text-sm font-semibold tabular-nums text-ink">{formatCurrency(Number(p.revenue), currency)}</span>
+                          </div>
+                          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-canvas">
+                            <div className="h-full rounded-full bg-gradient-to-r from-accent/60 to-accent transition-all duration-500 group-hover:opacity-80" style={{ width: `${maxProductRevenue > 0 ? Math.max(2, (Number(p.revenue) / maxProductRevenue) * 100) : 0}%` }} />
+                          </div>
+                          <p className="mt-1.5 text-[11px] text-ink/45">{Number(p.quantity_sold).toLocaleString()} units sold · click for sizes and modifiers</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
             <div className="mt-6 rounded-2xl border border-line bg-surface p-5">
               <h2 className="text-sm font-semibold text-ink">Sales Over Time</h2>
               <div className="mt-4 flex items-end gap-2" style={{ height: 120 }}>
@@ -421,6 +487,49 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
           </>
         )}
       </div>
+
+      {showBestSellersReport && report && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6" role="dialog" aria-modal="true" aria-labelledby="best-sellers-title" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowBestSellersReport(false); }}>
+          <section className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl">
+            <header className="flex flex-wrap items-start justify-between gap-4 border-b border-line bg-canvas/70 p-5 sm:p-6">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">HUBDINE · PRODUCT ANALYTICS</p>
+                <h2 id="best-sellers-title" className="mt-1 font-display text-xl font-semibold text-ink sm:text-2xl">Best-Selling Products</h2>
+                <p className="mt-1 text-sm text-ink/55">{startDate} — {endDate} · Ranked by revenue</p>
+              </div>
+              <button type="button" onClick={() => setShowBestSellersReport(false)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-line text-ink/55 transition hover:bg-surface hover:text-ink" aria-label="Close report">✕</button>
+            </header>
+            <div className="grid grid-cols-1 gap-3 border-b border-line p-4 sm:grid-cols-3 sm:p-5">
+              <div className="rounded-xl bg-canvas p-4"><p className="text-xs text-ink/50">Products sold</p><p className="mt-1 text-2xl font-semibold tabular-nums text-ink">{report.products.length}</p></div>
+              <div className="rounded-xl bg-canvas p-4"><p className="text-xs text-ink/50">Total units sold</p><p className="mt-1 text-2xl font-semibold tabular-nums text-ink">{report.products.reduce((sum, p) => sum + Number(p.quantity_sold || 0), 0).toLocaleString()}</p></div>
+              <div className="rounded-xl bg-canvas p-4"><p className="text-xs text-ink/50">Product revenue</p><p className="mt-1 text-2xl font-semibold tabular-nums text-accent">{formatCurrency(report.products.reduce((sum, p) => sum + Number(p.revenue || 0), 0), currency)}</p></div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+              {report.products.length === 0 ? <p className="py-12 text-center text-sm text-ink/50">No product sales for this period.</p> : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[620px] border-collapse text-left text-sm">
+                    <thead><tr className="border-b border-line text-xs uppercase tracking-wide text-ink/45"><th className="px-3 py-3 font-semibold">Rank / Product</th><th className="px-3 py-3 text-right font-semibold">Units sold</th><th className="px-3 py-3 text-right font-semibold">Revenue</th><th className="px-3 py-3 text-right font-semibold">Share of product revenue</th><th className="px-3 py-3 text-right font-semibold">Details</th></tr></thead>
+                    <tbody>
+                      {report.products.map((p, index) => {
+                        const totalProductRevenue = report.products.reduce((sum, product) => sum + Number(product.revenue || 0), 0);
+                        const share = totalProductRevenue > 0 ? Number(p.revenue || 0) / totalProductRevenue * 100 : 0;
+                        return <tr key={p.product_id} className="border-b border-line/70 transition hover:bg-canvas/70">
+                          <td className="px-3 py-3"><div className="flex items-center gap-3"><span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${index === 0 ? 'bg-accent text-white' : 'bg-canvas text-ink/60'}`}>{index + 1}</span><span className="font-medium text-ink">{p.product_name}</span></div></td>
+                          <td className="px-3 py-3 text-right font-mono tabular-nums text-ink/70">{Number(p.quantity_sold).toLocaleString()}</td>
+                          <td className="px-3 py-3 text-right font-mono font-semibold tabular-nums text-ink">{formatCurrency(Number(p.revenue), currency)}</td>
+                          <td className="px-3 py-3 text-right"><div className="flex items-center justify-end gap-2"><span className="text-xs tabular-nums text-ink/60">{share.toFixed(1)}%</span><div className="h-1.5 w-16 overflow-hidden rounded-full bg-canvas"><div className="h-full rounded-full bg-accent" style={{ width: `${share}%` }} /></div></div></td>
+                          <td className="px-3 py-3 text-right"><button type="button" onClick={() => openBreakdown(p)} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-accent/50 hover:text-accent">Sizes & options</button></td>
+                        </tr>;
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="mt-4 text-xs text-ink/40">Choose “Sizes & options” to see sold sizes and selected modifiers for a product. Revenue and rankings use the selected reporting period.</p>
+            </div>
+          </section>
+        </div>
+      )}
 
       {breakdownProduct && (
         <aside className="w-full shrink-0 overflow-y-auto border-t border-line bg-surface p-5 sm:p-6 lg:w-96 lg:border-l lg:border-t-0">
