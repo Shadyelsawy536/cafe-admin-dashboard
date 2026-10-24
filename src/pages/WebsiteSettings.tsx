@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { ImageUpload } from '../components/ImageUpload';
 import { supabase } from '../lib/supabase';
 import { RESTAURANT_ID } from '../lib/tenant';
 
