@@ -468,7 +468,6 @@ function SalesTrendChart({
   view: 'day' | 'week' | 'month';
   formatCurrency: (amount: number, currency: string) => string;
 }) {
-  const paidOrders = orders.filter(order => order.payment_verified === true && !['cancelled', 'rejected'].includes((order.status || '').toLowerCase()));
   const buckets = new Map<string, TrendPoint>();
   const getBucket = (date: Date) => {
     const d = new Date(date);
