@@ -49,27 +49,38 @@ export function Settings(){
     is_active:true,
     sort_order:0
   };
-  let result;
-  if(promotion.id){
-    result=await supabase.from('restaurant_promotions').update({
-      title:payload.title,
-      subtitle:payload.subtitle,
-      is_active:true
-    }).eq('id',promotion.id).eq('restaurant_id',RESTAURANT_ID).select('id,title,subtitle,is_active').maybeSingle();
-  }else{
-    result=await supabase.from('restaurant_promotions').insert(payload).select('id,title,subtitle,is_active').single();
+
+  // The home screen displays the first active promotion for this restaurant.
+  // Older test runs created duplicate active rows, so update every active
+  // banner for this tenant to prevent the app selecting a stale duplicate.
+  const updated=await supabase.from('restaurant_promotions').update({
+    title:payload.title,
+    subtitle:payload.subtitle,
+    is_active:true,
+    sort_order:0
+  }).eq('restaurant_id',RESTAURANT_ID).eq('is_active',true).select('id,title,subtitle,is_active');
+
+  if(updated.error){
+    setSavingBanner(false);
+    setMessage('Banner save failed: '+updated.error.message);
+    return;
   }
+
+  let savedRows=updated.data??[];
+  if(savedRows.length===0){
+    const inserted=await supabase.from('restaurant_promotions').insert(payload)
+      .select('id,title,subtitle,is_active').single();
+    if(inserted.error){
+      setSavingBanner(false);
+      setMessage('Banner save failed: '+inserted.error.message);
+      return;
+    }
+    savedRows=[inserted.data];
+  }
+
   setSavingBanner(false);
-  if(result.error){
-    setMessage('Banner save failed: '+result.error.message);
-    return;
-  }
-  if(!result.data){
-    setMessage('Banner save failed: no matching promotion was updated. Reload the page and try again.');
-    return;
-  }
-  setPromotion({...result.data,subtitle:result.data.subtitle??''});
-  setMessage('Banner heading and subtitle saved successfully.');
+  setPromotion({...savedRows[0],subtitle:savedRows[0].subtitle??''});
+  setMessage(`Banner heading and subtitle saved successfully for this restaurant (${savedRows.length} active banner record(s) synchronized).`);
  }
  async function save(){if(!restaurant||!branding||!settings||!rules||!notifications||!promotion)return;setSaving(true);setMessage(null);const rs=await Promise.all([
   supabase.from('restaurants').update({name:restaurant.name.trim(),description:restaurant.description?.trim()||null,logo_url:restaurant.logo_url||null,cover_image_url:restaurant.cover_image_url||null,phone:restaurant.phone?.trim()||null,email:restaurant.email?.trim()||null,address:restaurant.address?.trim()||null}).eq('id',RESTAURANT_ID),
