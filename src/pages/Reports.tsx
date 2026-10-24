@@ -518,7 +518,7 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
                           <td className="px-3 py-3 text-right font-mono tabular-nums text-ink/70">{Number(p.quantity_sold).toLocaleString()}</td>
                           <td className="px-3 py-3 text-right font-mono font-semibold tabular-nums text-ink">{formatCurrency(Number(p.revenue), currency)}</td>
                           <td className="px-3 py-3 text-right"><div className="flex items-center justify-end gap-2"><span className="text-xs tabular-nums text-ink/60">{share.toFixed(1)}%</span><div className="h-1.5 w-16 overflow-hidden rounded-full bg-canvas"><div className="h-full rounded-full bg-accent" style={{ width: `${share}%` }} /></div></div></td>
-                          <td className="px-3 py-3 text-right"><button type="button" onClick={() => openBreakdown(p)} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-accent/50 hover:text-accent">Sizes & options</button></td>
+                          <td className="px-3 py-3 text-right"><button type="button" onClick={() => { setShowBestSellersReport(false); void openBreakdown(p); }} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-accent/50 hover:text-accent">Sizes & options</button></td>
                         </tr>;
                       })}
                     </tbody>
