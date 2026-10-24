@@ -38,6 +38,18 @@ interface ProductBreakdown {
   variants: VariantBreakdown[];
   modifiers: ModifierBreakdownRow[];
 }
+interface AnalyticsOrder {
+  total: number | string | null;
+  status: string | null;
+  created_at: string;
+  payment_verified: boolean | null;
+}
+interface TrendPoint {
+  key: string;
+  label: string;
+  revenue: number;
+  orders: number;
+}
 
 function formatCurrency(amount: number, currency: string) {
   const code = currency.trim().toUpperCase();
@@ -69,6 +81,11 @@ export function Reports() {
   const [loading, setLoading] = useState(true);
   const [reportError, setReportError] = useState<string | null>(null);
   const [currency, setCurrency] = useState('EGP');
+  const [analyticsOrders, setAnalyticsOrders] = useState<AnalyticsOrder[]>([]);
+  const [todayOrdersCount, setTodayOrdersCount] = useState(0);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  const [previousSales, setPreviousSales] = useState<number | null>(null);
+  const [trendView, setTrendView] = useState<'day' | 'week' | 'month'>('day');
 
   const [breakdownProduct, setBreakdownProduct] = useState<ProductSales | null>(null);
   const [breakdown, setBreakdown] = useState<ProductBreakdown | null>(null);
@@ -101,18 +118,59 @@ export function Reports() {
       .maybeSingle();
     if (settings?.currency) setCurrency(settings.currency);
 
-    const { data, error } = await supabase.rpc('get_sales_report', {
-      p_restaurant_id: RESTAURANT_ID,
-      p_start: start.toISOString(),
-      p_end: end.toISOString(),
-    });
+    const duration = Math.max(24 * 60 * 60 * 1000, end.getTime() - start.getTime());
+    const previousStart = new Date(start.getTime() - duration);
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(todayStart);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [
+      { data, error },
+      { data: orderRows, error: ordersError },
+      { data: previousReport },
+      { count: todayCount },
+      { count: pendingCount },
+    ] = await Promise.all([
+      supabase.rpc('get_sales_report', {
+        p_restaurant_id: RESTAURANT_ID,
+        p_start: start.toISOString(),
+        p_end: end.toISOString(),
+      }),
+      supabase.from('orders')
+        .select('total, status, created_at, payment_verified')
+        .eq('restaurant_id', RESTAURANT_ID)
+        .gte('created_at', start.toISOString())
+        .lt('created_at', end.toISOString())
+        .order('created_at', { ascending: true }),
+      supabase.rpc('get_sales_report', {
+        p_restaurant_id: RESTAURANT_ID,
+        p_start: previousStart.toISOString(),
+        p_end: start.toISOString(),
+      }),
+      supabase.from('orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('restaurant_id', RESTAURANT_ID)
+        .gte('created_at', todayStart.toISOString())
+        .lt('created_at', tomorrow.toISOString())
+        .not('status', 'in', '("cancelled","rejected")'),
+      supabase.from('orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('restaurant_id', RESTAURANT_ID)
+        .eq('status', 'pending'),
+    ]);
 
     if (error || !data) {
       setReport(null);
       setReportError(error?.message || 'The report could not be loaded. Please try again.');
     } else {
       setReport(data as SalesReport);
+      setPreviousSales(previousReport ? Number((previousReport as SalesReport).totals?.total_sales ?? 0) : null);
     }
+    setAnalyticsOrders(!ordersError && orderRows ? orderRows as AnalyticsOrder[] : []);
+    setTodayOrdersCount(todayCount ?? 0);
+    setPendingOrdersCount(pendingCount ?? 0);
     setLoading(false);
   }, [startDate, endDate]);
 
@@ -242,7 +300,7 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
         <h1 className="font-display text-2xl font-semibold text-ink">Reports</h1>
         <p className="mt-1 text-sm text-ink/60">Sales performance for the selected period.</p>
 
-        <div className="mt-6 flex flex-wrap items-center gap-3">
+        <div className="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface p-3 sm:p-4">
           <div className="flex items-center gap-2">
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent" />
             <span className="text-sm text-ink/40">to</span>
@@ -264,11 +322,53 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
           <div role="alert" className="mt-8 rounded-xl border border-line bg-surface p-5 text-sm text-ink/70"><p className="font-medium text-ink">Couldn't load report</p><p className="mt-1">{reportError || 'No report data is available for this date range.'}</p><button onClick={() => void load()} className="mt-4 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white">Try again</button></div>
         ) : (
           <>
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <StatCard label="Total Sales" value={formatCurrency(Number(report.totals.total_sales), currency)} accent="text-accent" />
               <StatCard label="Total Orders" value={String(report.totals.total_orders)} />
               <StatCard label="Avg. Order Value" value={formatCurrency(Number(report.totals.avg_order_value), currency)} />
+              <StatCard label="Orders Today" value={String(todayOrdersCount)} />
+              <StatCard label="Pending Orders" value={String(pendingOrdersCount)} />
             </div>
+
+            <section className="mt-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-semibold text-ink">Sales performance</h2>
+                  <p className="mt-1 text-xs text-ink/50">Verified payments · selected reporting period</p>
+                </div>
+                <div className="flex rounded-lg border border-line bg-canvas p-1">
+                  {(['day', 'week', 'month'] as const).map((view) => (
+                    <button key={view} onClick={() => setTrendView(view)} className={`rounded-md px-3 py-1.5 text-xs font-semibold capitalize transition ${trendView === view ? 'bg-surface text-ink shadow-sm' : 'text-ink/50 hover:text-ink'}`}>
+                      {view}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="rounded-xl bg-canvas p-4">
+                  <p className="text-xs text-ink/50">Period sales</p>
+                  <p className="mt-2 font-mono text-xl font-semibold text-ink">{formatCurrency(Number(report.totals.total_sales), currency)}</p>
+                </div>
+                <div className="rounded-xl bg-canvas p-4">
+                  <p className="text-xs text-ink/50">Previous equivalent period</p>
+                  <p className="mt-2 font-mono text-xl font-semibold text-ink">{previousSales === null ? '—' : formatCurrency(previousSales, currency)}</p>
+                </div>
+                <div className="rounded-xl bg-canvas p-4">
+                  <p className="text-xs text-ink/50">Change vs previous period</p>
+                  <p className={`mt-2 font-mono text-xl font-semibold ${previousSales !== null && Number(report.totals.total_sales) >= previousSales ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {previousSales === null ? '—' : previousSales === 0 ? (Number(report.totals.total_sales) === 0 ? '0.0%' : 'New sales') : `${Number(((Number(report.totals.total_sales) - previousSales) / previousSales) * 100).toFixed(1)}%`}
+                  </p>
+                </div>
+              </div>
+              <SalesTrendChart
+                daily={report.daily}
+                orders={analyticsOrders}
+                currency={currency}
+                view={trendView}
+                formatCurrency={formatCurrency}
+              />
+              <HourlySalesChart orders={analyticsOrders} currency={currency} formatCurrency={formatCurrency} />
+            </section>
 
             <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div className="rounded-2xl border border-line bg-surface p-5">
@@ -354,6 +454,107 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
           )}
         </aside>
       )}
+    </div>
+  );
+}
+
+
+function SalesTrendChart({
+  daily, orders, currency, view, formatCurrency: format,
+}: {
+  daily: DailySales[];
+  orders: AnalyticsOrder[];
+  currency: string;
+  view: 'day' | 'week' | 'month';
+  formatCurrency: (amount: number, currency: string) => string;
+}) {
+  const paidOrders = orders.filter(order => order.payment_verified === true && !['cancelled', 'rejected'].includes((order.status || '').toLowerCase()));
+  const buckets = new Map<string, TrendPoint>();
+  const getBucket = (date: Date) => {
+    const d = new Date(date);
+    if (view === 'month') {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      return { key, label: d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }) };
+    }
+    if (view === 'week') {
+      const day = (d.getDay() + 6) % 7;
+      d.setDate(d.getDate() - day);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return { key, label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) };
+    }
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { key, label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) };
+  };
+  daily.forEach(day => {
+    const date = new Date(day.day);
+    const bucket = getBucket(date);
+    const existing = buckets.get(bucket.key) ?? { key: bucket.key, label: bucket.label, revenue: 0, orders: 0 };
+    existing.revenue += Number(day.revenue || 0);
+    existing.orders += Number(day.orders || 0);
+    buckets.set(bucket.key, existing);
+  });
+  const points = Array.from(buckets.values()).sort((a, b) => a.key.localeCompare(b.key));
+  const max = Math.max(1, ...points.map(point => point.revenue));
+  return (
+    <div className="mt-6">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-ink">Sales trend</h3>
+        <span className="text-xs text-ink/45">By {view}</span>
+      </div>
+      {points.length === 0 ? <p className="py-8 text-center text-sm text-ink/45">No sales data for this period.</p> : (
+        <div className="flex h-56 items-end gap-2 overflow-x-auto border-b border-line pb-2">
+          {points.map(point => (
+            <div key={point.key} className="flex h-full min-w-[34px] flex-1 flex-col items-center justify-end gap-2" title={`${point.label}: ${format(point.revenue, currency)} · ${point.orders} orders`}>
+              <span className="max-w-20 truncate text-[10px] text-ink/45">{point.revenue > 0 ? format(point.revenue, currency) : '—'}</span>
+              <div className="flex h-36 w-full items-end rounded-t-md bg-canvas">
+                <div className="w-full rounded-t-md bg-accent transition-all" style={{ height: `${point.revenue > 0 ? Math.max(4, point.revenue / max * 100) : 0}%` }} />
+              </div>
+              <span className="whitespace-nowrap text-[10px] text-ink/50">{point.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="mt-3 text-xs text-ink/40">Sales totals come from the report function. Hourly distribution below uses orders marked as payment verified.</p>
+    </div>
+  );
+}
+
+function HourlySalesChart({ orders, currency, formatCurrency: format }: {
+  orders: AnalyticsOrder[];
+  currency: string;
+  formatCurrency: (amount: number, currency: string) => string;
+}) {
+  const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, sales: 0, orders: 0 }));
+  orders.forEach(order => {
+    if (order.payment_verified !== true || ['cancelled', 'rejected'].includes((order.status || '').toLowerCase())) return;
+    const hour = new Date(order.created_at).getHours();
+    hours[hour].sales += Number(order.total || 0);
+    hours[hour].orders += 1;
+  });
+  const max = Math.max(1, ...hours.map(hour => hour.sales));
+  const peak = hours.reduce((best, hour) => hour.sales > best.sales ? hour : best, hours[0]);
+  return (
+    <div className="mt-7 border-t border-line pt-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-ink">Hourly sales</h3>
+          <p className="mt-1 text-xs text-ink/45">Sales by time of day across the selected period</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-ink/45">Busiest sales hour</p>
+          <p className="mt-1 text-sm font-semibold text-ink">{peak.sales > 0 ? `${String(peak.hour).padStart(2, '0')}:00–${String((peak.hour + 1) % 24).padStart(2, '0')}:00` : 'No paid sales'}</p>
+        </div>
+      </div>
+      <div className="mt-5 grid h-36 grid-cols-12 items-end gap-1 sm:grid-cols-[repeat(24,minmax(0,1fr))]">
+        {hours.map(hour => (
+          <div key={hour.hour} className="group flex h-full min-w-0 flex-col items-center justify-end gap-1" title={`${String(hour.hour).padStart(2, '0')}:00 · ${format(hour.sales, currency)} · ${hour.orders} orders`}>
+            <div className="flex h-28 w-full items-end rounded-t bg-canvas">
+              <div className="w-full rounded-t-sm bg-accent/80 transition-all group-hover:bg-accent" style={{ height: `${hour.sales > 0 ? Math.max(4, hour.sales / max * 100) : 0}%` }} />
+            </div>
+            {hour.hour % 3 === 0 && <span className="text-[9px] text-ink/45">{String(hour.hour).padStart(2, '0')}</span>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
