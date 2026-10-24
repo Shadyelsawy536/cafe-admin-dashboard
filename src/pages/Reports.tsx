@@ -545,7 +545,7 @@ function HourlySalesChart({ orders, currency, formatCurrency: format }: {
           <p className="mt-1 text-sm font-semibold text-ink">{peak.sales > 0 ? `${String(peak.hour).padStart(2, '0')}:00–${String((peak.hour + 1) % 24).padStart(2, '0')}:00` : 'No paid sales'}</p>
         </div>
       </div>
-      <div className="mt-5 grid h-36 grid-cols-12 items-end gap-1 sm:grid-cols-24">
+      <div className="mt-5 grid h-36 grid-cols-12 items-end gap-1 sm:grid-cols-[repeat(24,minmax(0,1fr))]">
         {hours.map(hour => (
           <div key={hour.hour} className="group flex h-full min-w-0 flex-col items-center justify-end gap-1" title={`${String(hour.hour).padStart(2, '0')}:00 · ${format(hour.sales, currency)} · ${hour.orders} orders`}>
             <div className="flex h-28 w-full items-end rounded-t bg-canvas">
