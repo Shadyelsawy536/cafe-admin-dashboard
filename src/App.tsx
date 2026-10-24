@@ -16,7 +16,6 @@ const DeliveryZones = lazy(() => import('./pages/DeliveryZones').then((m) => ({ 
 const StaffPermissions = lazy(() => import('./pages/StaffPermissions').then((m) => ({ default: m.StaffPermissions })));
 const OffersCoupons = lazy(() => import('./pages/OffersCoupons').then((m) => ({ default: m.OffersCoupons })));
 const Customers = lazy(() => import('./pages/Customers').then((m) => ({ default: m.Customers })));
-const Notifications = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.Notifications })));
 const Payments = lazy(() => import('./pages/Payments').then((m) => ({ default: m.Payments })));
 
 function PageFallback() {
@@ -62,7 +61,6 @@ export default function App() {
     <Route path="/staff" element={<RequirePermission permission="staff.manage">{page(<StaffPermissions />)}</RequirePermission>} />
     <Route path="/offers-coupons" element={<RequirePermission permission="offers.manage">{page(<OffersCoupons />)}</RequirePermission>} />
     <Route path="/customers" element={<RequirePermission permission="customers.view">{page(<Customers />)}</RequirePermission>} />
-    <Route path="/notifications" element={<RequirePermission permission="settings.manage">{page(<Notifications />)}</RequirePermission>} />
     <Route path="/payments" element={page(<Payments />)} />
     </Route><Route path="*" element={<Navigate to="/" replace />} />
   </Routes></BrowserRouter></AuthProvider>;
