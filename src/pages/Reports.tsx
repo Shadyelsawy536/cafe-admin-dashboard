@@ -67,6 +67,7 @@ export function Reports() {
   const [endDate, setEndDate] = useState(toDateInputValue(new Date()));
   const [report, setReport] = useState<SalesReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reportError, setReportError] = useState<string | null>(null);
   const [currency, setCurrency] = useState('EGP');
 
   const [breakdownProduct, setBreakdownProduct] = useState<ProductSales | null>(null);
@@ -84,6 +85,13 @@ export function Reports() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setReportError(null);
+    if (!startDate || !endDate || startDate > endDate) {
+      setReport(null);
+      setReportError('Choose a valid date range. The start date must be on or before the end date.');
+      setLoading(false);
+      return;
+    }
     const { start, end } = rangeBounds();
 
     const { data: settings } = await supabase
@@ -99,7 +107,12 @@ export function Reports() {
       p_end: end.toISOString(),
     });
 
-    if (!error && data) setReport(data as SalesReport);
+    if (error || !data) {
+      setReport(null);
+      setReportError(error?.message || 'The report could not be loaded. Please try again.');
+    } else {
+      setReport(data as SalesReport);
+    }
     setLoading(false);
   }, [startDate, endDate]);
 
@@ -110,6 +123,45 @@ export function Reports() {
   function applyPreset(days: number) {
     setStartDate(toDateInputValue(daysAgo(days)));
     setEndDate(toDateInputValue(new Date()));
+  }
+
+  function exportCsv() {
+    if (!report) return;
+    const rows = [
+      ['Report', 'Sales performance'],
+      ['Start date', startDate],
+      ['End date', endDate],
+      [],
+      ['Summary'],
+      ['Total sales', report.totals.total_sales],
+      ['Total orders', report.totals.total_orders],
+      ['Average order value', report.totals.avg_order_value],
+      [],
+      ['Daily sales'],
+      ['Date', 'Orders', 'Revenue'],
+      ...report.daily.map(day => [day.day, day.orders, day.revenue]),
+      [],
+      ['Product sales'],
+      ['Product', 'Quantity sold', 'Revenue'],
+      ...report.products.map(product => [product.product_name, product.quantity_sold, product.revenue]),
+      [],
+      ['Category sales'],
+      ['Category', 'Quantity sold', 'Revenue'],
+      ...report.categories.map(category => [category.category_name, category.quantity_sold, category.revenue]),
+    ];
+    const csv = rows.map(row => row.map(value => {
+      const text = String(value ?? '');
+      return `"${text.replace(/"/g, '""')}"`;
+    }).join(',')).join('\r\n');
+    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `sales-report-${startDate}-to-${endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function openBreakdown(product: ProductSales) {
@@ -142,8 +194,8 @@ export function Reports() {
   const hasVariantData = breakdown ? breakdown.variants.some((v) => v.label !== 'Standard') : false;
 
   return (
-    <div className="flex h-full">
-      <div className="flex-1 overflow-y-auto p-8">
+    <div className="flex min-h-full flex-col lg:flex-row">
+      <div className="min-w-0 flex-1 overflow-y-auto p-5 sm:p-8">
         <h1 className="font-display text-2xl font-semibold text-ink">Reports</h1>
         <p className="mt-1 text-sm text-ink/60">Sales performance for the selected period.</p>
 
@@ -160,12 +212,13 @@ export function Reports() {
               </button>
             ))}
           </div>
+          <button onClick={exportCsv} disabled={!report || loading} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">Export CSV</button>
         </div>
 
         {loading ? (
           <p className="mt-8 text-sm text-ink/50">Loading…</p>
         ) : !report ? (
-          <p className="mt-8 text-sm text-ink/50">Couldn't load report.</p>
+          <div role="alert" className="mt-8 rounded-xl border border-line bg-surface p-5 text-sm text-ink/70"><p className="font-medium text-ink">Couldn't load report</p><p className="mt-1">{reportError || 'No report data is available for this date range.'}</p><button onClick={() => void load()} className="mt-4 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white">Try again</button></div>
         ) : (
           <>
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -217,7 +270,7 @@ export function Reports() {
                 {report.daily.length === 0 && <p className="text-xs text-ink/40">No sales in this period.</p>}
                 {report.daily.map((d) => (
                   <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${formatCurrency(Number(d.revenue), currency)} · ${d.orders} orders`}>
-                    <div className="w-full rounded-t bg-accent/70" style={{ height: `${maxDailyRevenue > 0 ? (Number(d.revenue) / maxDailyRevenue) * 100 : 2}px`, minHeight: 2 }} />
+                    <div className="w-full rounded-t bg-accent/70" style={{ height: `${maxDailyRevenue > 0 ? (Number(d.revenue) / maxDailyRevenue) * 100 : 0}%`, minHeight: Number(d.revenue) > 0 ? 3 : 0 }} />
                     <span className="text-[9px] text-ink/40">{new Date(d.day).getDate()}</span>
                   </div>
                 ))}
@@ -228,7 +281,7 @@ export function Reports() {
       </div>
 
       {breakdownProduct && (
-        <aside className="w-96 shrink-0 overflow-y-auto border-l border-line bg-surface p-6">
+        <aside className="w-full shrink-0 overflow-y-auto border-t border-line bg-surface p-5 sm:p-6 lg:w-96 lg:border-l lg:border-t-0">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold text-ink">{breakdownProduct.product_name}</h2>
             <button onClick={() => setBreakdownProduct(null)} className="text-ink/40 hover:text-ink">✕</button>
