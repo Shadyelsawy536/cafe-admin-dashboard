@@ -3,6 +3,8 @@
 -- inferred safely from historical records. New website orders default to website.
 begin;
 
+alter type public.delivery_type add value if not exists 'dine_in';
+
 alter table public.restaurant_settings
   add column if not exists accepts_dine_in boolean not null default false,
   add column if not exists qr_primary_color text not null default '#111827',
