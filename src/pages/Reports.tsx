@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { RESTAURANT_ID } from '../lib/tenant';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ProductSales {
   product_id: string;
@@ -75,6 +76,10 @@ const PRESETS = [
 ];
 
 export function Reports() {
+  const { user, roleName } = useAuth();
+  const isOwner = (roleName ?? '').trim().toLowerCase() === 'owner';
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const [branchFilter, setBranchFilter] = useState('all');
   const [startDate, setStartDate] = useState(toDateInputValue(daysAgo(30)));
   const [endDate, setEndDate] = useState(toDateInputValue(new Date()));
   const [report, setReport] = useState<SalesReport | null>(null);
@@ -86,6 +91,8 @@ export function Reports() {
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [previousSales, setPreviousSales] = useState<number | null>(null);
   const [trendView, setTrendView] = useState<'day' | 'week' | 'month'>('day');
+  const [staffBranchId, setStaffBranchId] = useState<string | null>(null);
+  const effectiveBranchId = isOwner ? (branchFilter === 'all' ? null : branchFilter) : staffBranchId;
 
   const [breakdownProduct, setBreakdownProduct] = useState<ProductSales | null>(null);
   const [breakdown, setBreakdown] = useState<ProductBreakdown | null>(null);
@@ -112,6 +119,23 @@ export function Reports() {
     }
     const { start, end } = rangeBounds();
 
+    const [{ data: branchRows }, { data: membership }] = await Promise.all([
+      supabase.from('restaurant_locations')
+        .select('id, name')
+        .eq('restaurant_id', RESTAURANT_ID)
+        .eq('is_active', true)
+        .order('name'),
+      user ? supabase.from('restaurant_users')
+        .select('branch_id')
+        .eq('restaurant_id', RESTAURANT_ID)
+        .eq('user_id', user.id)
+        .maybeSingle() : Promise.resolve({ data: null }),
+    ]);
+    setBranches(branchRows ?? []);
+    const assignedBranchId = (membership as { branch_id?: string | null } | null)?.branch_id ?? null;
+    setStaffBranchId(assignedBranchId);
+    const selectedBranchId = isOwner ? (branchFilter === 'all' ? null : branchFilter) : assignedBranchId;
+
     const { data: settings } = await supabase
       .from('restaurant_settings')
       .select('currency')
@@ -127,6 +151,28 @@ export function Reports() {
     const tomorrow = new Date(todayStart);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    let ordersQuery = supabase.from('orders')
+      .select('total, status, created_at, payment_verified')
+      .eq('restaurant_id', RESTAURANT_ID)
+      .gte('created_at', start.toISOString())
+      .lt('created_at', end.toISOString())
+      .order('created_at', { ascending: true });
+    let todayQuery = supabase.from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('restaurant_id', RESTAURANT_ID)
+      .gte('created_at', todayStart.toISOString())
+      .lt('created_at', tomorrow.toISOString())
+      .not('status', 'in', '("cancelled","rejected")');
+    let pendingQuery = supabase.from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('restaurant_id', RESTAURANT_ID)
+      .eq('status', 'pending');
+    if (selectedBranchId) {
+      ordersQuery = ordersQuery.eq('branch_id', selectedBranchId);
+      todayQuery = todayQuery.eq('branch_id', selectedBranchId);
+      pendingQuery = pendingQuery.eq('branch_id', selectedBranchId);
+    }
+
     const [
       { data, error },
       { data: orderRows, error: ordersError },
@@ -138,28 +184,17 @@ export function Reports() {
         p_restaurant_id: RESTAURANT_ID,
         p_start: start.toISOString(),
         p_end: end.toISOString(),
+        p_branch_id: selectedBranchId,
       }),
-      supabase.from('orders')
-        .select('total, status, created_at, payment_verified')
-        .eq('restaurant_id', RESTAURANT_ID)
-        .gte('created_at', start.toISOString())
-        .lt('created_at', end.toISOString())
-        .order('created_at', { ascending: true }),
+      ordersQuery,
       supabase.rpc('get_sales_report', {
         p_restaurant_id: RESTAURANT_ID,
         p_start: previousStart.toISOString(),
         p_end: start.toISOString(),
+        p_branch_id: selectedBranchId,
       }),
-      supabase.from('orders')
-        .select('id', { count: 'exact', head: true })
-        .eq('restaurant_id', RESTAURANT_ID)
-        .gte('created_at', todayStart.toISOString())
-        .lt('created_at', tomorrow.toISOString())
-        .not('status', 'in', '("cancelled","rejected")'),
-      supabase.from('orders')
-        .select('id', { count: 'exact', head: true })
-        .eq('restaurant_id', RESTAURANT_ID)
-        .eq('status', 'pending'),
+      todayQuery,
+      pendingQuery,
     ]);
 
     if (error || !data) {
@@ -173,7 +208,7 @@ export function Reports() {
     setTodayOrdersCount(todayCount ?? 0);
     setPendingOrdersCount(pendingCount ?? 0);
     setLoading(false);
-  }, [startDate, endDate]);
+  }, [startDate, endDate, branchFilter, isOwner, user?.id]);
 
   useEffect(() => {
     load();
@@ -193,6 +228,7 @@ export function Reports() {
         p_product_id: product.product_id,
         p_start: start.toISOString(),
         p_end: end.toISOString(),
+        p_branch_id: effectiveBranchId,
       });
       return !error && data ? { product, breakdown: data as ProductBreakdown } : null;
     }));
@@ -277,6 +313,7 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
       p_product_id: product.product_id,
       p_start: start.toISOString(),
       p_end: end.toISOString(),
+      p_branch_id: effectiveBranchId,
     });
 
     if (!error && data) setBreakdown(data as ProductBreakdown);
@@ -299,7 +336,7 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
     <div className="flex min-h-full flex-col lg:flex-row">
       <div className="min-w-0 flex-1 overflow-y-auto p-5 sm:p-8">
         <h1 className="font-display text-2xl font-semibold text-ink">Reports</h1>
-        <p className="mt-1 text-sm text-ink/60">Sales performance for the selected period.</p>
+        <p className="mt-1 text-sm text-ink/60">Sales performance for the selected period{isOwner && branchFilter === 'all' ? ' across all branches' : ''}.</p>
 
         <div className="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface p-3 sm:p-4">
           <div className="flex items-center gap-2">
@@ -307,6 +344,25 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
             <span className="text-sm text-ink/40">to</span>
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent" />
           </div>
+          {isOwner && branches.length > 0 && (
+            <label className="flex items-center gap-2 text-sm text-ink/60">
+              Branch
+              <select
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                aria-label="Filter reports by branch"
+              >
+                <option value="all">All branches</option>
+                {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              </select>
+            </label>
+          )}
+          {!isOwner && staffBranchId && (
+            <span className="rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink/60">
+              Branch: {branches.find((branch) => branch.id === staffBranchId)?.name ?? 'Assigned branch'}
+            </span>
+          )}
           <div className="flex gap-2">
             {PRESETS.map((p) => (
               <button key={p.label} onClick={() => applyPreset(p.days)} className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink/60 hover:border-accent/40">
