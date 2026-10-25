@@ -18,6 +18,7 @@ interface OrderItem {
 }
 interface OrderRow {
   id: string;
+  branch_id: string | null;
   customer_name: string;
   customer_phone: string;
   delivery_type: 'delivery' | 'pickup';
@@ -54,6 +55,8 @@ const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
 
 export function Orders() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [branches, setBranches] = useState<{id:string;name:string}[]>([]);
+  const [branchFilter, setBranchFilter] = useState('all');
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
   const [selected, setSelected] = useState<OrderRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,10 +64,12 @@ export function Orders() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    const { data: branchRows } = await supabase.from('restaurant_locations').select('id,name').eq('restaurant_id', RESTAURANT_ID).eq('is_active', true).order('name');
+    setBranches(branchRows ?? []);
     const { data, error } = await supabase
       .from('orders')
       .select(
-        `id, customer_name, customer_phone, delivery_type, delivery_address, pickup_branch,
+        `id, branch_id, customer_name, customer_phone, delivery_type, delivery_address, pickup_branch,
          payment_method, subtotal, tax, discount_amount, total, status, created_at,
          order_items(id, product_name, variant_label, unit_price, quantity, line_total,
            order_item_modifiers(modifier_name, price))`
@@ -144,7 +149,7 @@ export function Orders() {
   };
 }, [load]);
 
-  const filtered = filter === 'all' ? orders : orders.filter((o) => o.status === filter);
+  const filtered = orders.filter((o) => (filter === 'all' || o.status === filter) && (branchFilter === 'all' || o.branch_id === branchFilter));
 
   async function advanceStatus(order: OrderRow) {
     const next = NEXT_STATUS[order.status];
@@ -176,7 +181,8 @@ export function Orders() {
           {filtered.length} order{filtered.length === 1 ? '' : 's'}
         </p>
 
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          {branches.length > 1 && <label className="mr-2 flex items-center gap-2 text-xs text-ink/60">Branch<select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)} className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-ink"><option value="all">All branches</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>}
           {FILTERS.map((f) => (
             <button
               key={f.value}
@@ -200,6 +206,7 @@ export function Orders() {
               <thead className="border-b border-line bg-canvas/60 text-xs uppercase tracking-wide text-ink/50">
                 <tr>
                   <th className="px-4 py-3 font-medium">Order</th>
+                  {branches.length > 1 && <th className="px-4 py-3 font-medium">Branch</th>}
                   <th className="px-4 py-3 font-medium">Customer</th>
                   <th className="px-4 py-3 font-medium">Type</th>
                   <th className="px-4 py-3 font-medium">Total</th>
@@ -218,6 +225,7 @@ export function Orders() {
                     style={{ borderLeft: `4px solid ${STATUS_META[order.status].color}` }}
                   >
                     <td className="px-4 py-3 font-mono text-xs text-ink/70">#{order.id.slice(-6)}</td>
+                    {branches.length > 1 && <td className="px-4 py-3 text-ink/70">{branches.find((b) => b.id === order.branch_id)?.name ?? '—'}</td>}
                     <td className="px-4 py-3">{order.customer_name}</td>
                     <td className="px-4 py-3 capitalize text-ink/70">{order.delivery_type}</td>
                     <td className="px-4 py-3 font-mono tabular-nums">{Number(order.total).toFixed(2)}</td>
