@@ -7,6 +7,12 @@ interface CategoryOption {
   id: string;
   name: string;
 }
+interface BranchOption {
+  id: string;
+  name: string;
+  is_primary: boolean;
+}
+type BranchAvailability = 'inherit' | 'available' | 'unavailable';
 interface VariantRow {
   id?: string;
   label: string;
@@ -35,6 +41,13 @@ const STATUS_OPTIONS: ProductStatus[] = ['available', 'out_of_stock', 'hidden'];
 export function Products() {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [branchPriceOverride, setBranchPriceOverride] = useState('');
+  const [branchAvailability, setBranchAvailability] = useState<BranchAvailability>('inherit');
+  const [branchOverrideLoading, setBranchOverrideLoading] = useState(false);
+  const [branchOverrideSaving, setBranchOverrideSaving] = useState(false);
+  const [branchOverrideMessage, setBranchOverrideMessage] = useState('');
   const [allGroups, setAllGroups] = useState<ModifierGroupOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ProductRow | 'new' | null>(null);
@@ -51,7 +64,7 @@ export function Products() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [productsRes, categoriesRes, groupsRes] = await Promise.all([
+    const [productsRes, categoriesRes, groupsRes, branchesRes] = await Promise.all([
       supabase
         .from('products')
         .select(
@@ -65,10 +78,16 @@ export function Products() {
         .order('sort_order'),
       supabase.from('categories').select('id, name').eq('restaurant_id', RESTAURANT_ID).is('deleted_at', null).order('sort_order'),
       supabase.from('modifier_groups').select('id, name').eq('restaurant_id', RESTAURANT_ID).order('name'),
+      supabase.from('restaurant_locations').select('id, name, is_primary').eq('restaurant_id', RESTAURANT_ID).eq('is_active', true).order('sort_order'),
     ]);
     setProducts((productsRes.data as unknown as ProductRow[]) ?? []);
     setCategories(categoriesRes.data ?? []);
     setAllGroups(groupsRes.data ?? []);
+    const nextBranches = (branchesRes.data ?? []) as BranchOption[];
+    setBranches(nextBranches);
+    setSelectedBranchId((current) => current && nextBranches.some((branch) => branch.id === current)
+      ? current
+      : nextBranches.find((branch) => branch.is_primary)?.id ?? nextBranches[0]?.id ?? '');
     setLoading(false);
   }, []);
 
@@ -140,6 +159,18 @@ export function Products() {
         load();
       }
     )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'product_branch_overrides',
+        filter: `restaurant_id=eq.${RESTAURANT_ID}`,
+      },
+      () => {
+        load();
+      }
+    )
 
     .subscribe();
 
@@ -147,6 +178,71 @@ export function Products() {
     supabase.removeChannel(channel);
   };
 }, [load]);
+
+  async function loadBranchOverride(productId: string, branchId: string) {
+    setBranchOverrideMessage('');
+    setBranchPriceOverride('');
+    setBranchAvailability('inherit');
+    if (!branchId) return;
+    setBranchOverrideLoading(true);
+    const { data, error } = await supabase
+      .from('product_branch_overrides')
+      .select('price_override, is_available')
+      .eq('restaurant_id', RESTAURANT_ID)
+      .eq('product_id', productId)
+      .eq('branch_id', branchId)
+      .maybeSingle();
+    if (error) {
+      setBranchOverrideMessage('Could not load branch-specific settings.');
+    } else if (data) {
+      setBranchPriceOverride(data.price_override == null ? '' : String(data.price_override));
+      setBranchAvailability(data.is_available == null ? 'inherit' : data.is_available ? 'available' : 'unavailable');
+    }
+    setBranchOverrideLoading(false);
+  }
+
+  useEffect(() => {
+    if (selected && selected !== 'new' && selectedBranchId) {
+      void loadBranchOverride(selected.id, selectedBranchId);
+    } else {
+      setBranchPriceOverride('');
+      setBranchAvailability('inherit');
+      setBranchOverrideMessage('');
+    }
+    // loadBranchOverride is intentionally driven only by the selected product and branch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, selectedBranchId]);
+
+  async function saveBranchOverride() {
+    if (!selected || selected === 'new' || !selectedBranchId) return;
+    const trimmedPrice = branchPriceOverride.trim();
+    const parsedPrice = trimmedPrice === '' ? null : Number(trimmedPrice);
+    if (parsedPrice !== null && (!Number.isFinite(parsedPrice) || parsedPrice < 0)) {
+      setBranchOverrideMessage('Enter a valid price greater than or equal to zero.');
+      return;
+    }
+    setBranchOverrideSaving(true);
+    setBranchOverrideMessage('');
+    const payload = {
+      restaurant_id: RESTAURANT_ID,
+      branch_id: selectedBranchId,
+      product_id: selected.id,
+      price_override: parsedPrice,
+      is_available: branchAvailability === 'inherit' ? null : branchAvailability === 'available',
+      updated_at: new Date().toISOString(),
+    };
+    const result = parsedPrice === null && payload.is_available === null
+      ? await supabase.from('product_branch_overrides').delete()
+          .eq('restaurant_id', RESTAURANT_ID).eq('product_id', selected.id).eq('branch_id', selectedBranchId)
+      : await supabase.from('product_branch_overrides').upsert(payload, { onConflict: 'branch_id,product_id' });
+    if (result.error) {
+      setBranchOverrideMessage(result.error.message || 'Could not save branch settings.');
+    } else {
+      setBranchOverrideMessage('Branch settings saved.');
+      await load();
+    }
+    setBranchOverrideSaving(false);
+  }
 
   function openNew() {
     setName('');
@@ -272,9 +368,22 @@ export function Products() {
             <h1 className="font-display text-2xl font-semibold text-ink">Products</h1>
             <p className="mt-1 text-sm text-ink/60">{products.length} products</p>
           </div>
-          <button onClick={openNew} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-dark">
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-ink/70">
+              Branch
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                disabled={!branches.length}
+                className="ml-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+              >
+                {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              </select>
+            </label>
+            <button onClick={openNew} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-dark">
             + Add Product
-          </button>
+            </button>
+          </div>
         </div>
 
         <div className="mt-6 overflow-x-auto rounded-2xl border border-line bg-surface">
@@ -400,6 +509,51 @@ export function Products() {
               </select>
             </div>
           </div>
+
+          {selected !== 'new' && (
+            <section className="mt-6 rounded-xl border border-line bg-canvas/60 p-4">
+              <h3 className="text-sm font-semibold text-ink">Branch price & availability</h3>
+              <p className="mt-1 text-xs text-ink/60">
+                {branches.find((branch) => branch.id === selectedBranchId)?.name ?? 'Selected branch'} · Blank price and “Use product default” inherit the main product settings.
+              </p>
+              {branchOverrideLoading ? (
+                <p className="mt-3 text-sm text-ink/50">Loading branch settings…</p>
+              ) : (
+                <>
+                  <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-ink/50">Branch price (optional)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={branchPriceOverride}
+                    onChange={(e) => setBranchPriceOverride(e.target.value)}
+                    placeholder={`Use base price (${Number(basePrice).toFixed(2)})`}
+                    disabled={!selectedBranchId}
+                    className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                  />
+                  <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-ink/50">Availability at this branch</label>
+                  <select
+                    value={branchAvailability}
+                    onChange={(e) => setBranchAvailability(e.target.value as BranchAvailability)}
+                    disabled={!selectedBranchId}
+                    className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                  >
+                    <option value="inherit">Use product default</option>
+                    <option value="available">Available at this branch</option>
+                    <option value="unavailable">Unavailable at this branch</option>
+                  </select>
+                  {branchOverrideMessage && <p className="mt-2 text-xs text-ink/70">{branchOverrideMessage}</p>}
+                  <button
+                    onClick={saveBranchOverride}
+                    disabled={branchOverrideSaving || !selectedBranchId}
+                    className="mt-3 w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {branchOverrideSaving ? 'Saving…' : 'Save branch settings'}
+                  </button>
+                </>
+              )}
+            </section>
+          )}
 
           <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-ink/50">Category</label>
           <select
