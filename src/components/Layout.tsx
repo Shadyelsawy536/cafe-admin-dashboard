@@ -11,6 +11,7 @@ import { Icon, type IconName } from './Icons';
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: 'grid', permission: null, group: 'primary' },
   { to: '/orders', label: 'Orders', icon: 'receipt', permission: 'orders.view', group: 'primary' },
+  { to: '/tables', label: 'Tables & QR', icon: 'pin', permission: 'settings.manage', group: 'tools' },
   { to: '/products', label: 'Products', icon: 'coffee', permission: 'menu.manage', group: 'primary' },
   { to: '/customers', label: 'Customers', icon: 'users', permission: 'customers.view', group: 'primary' },
   { to: '/reports', label: 'Reports', icon: 'chart', permission: 'reports.view', group: 'primary' },
