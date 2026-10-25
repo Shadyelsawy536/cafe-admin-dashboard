@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Defaults (used until the restaurant's saved dashboard colors load, and on
+   the login page). Values are space-separated RGB channels. */
+:root {
+  --c-primary: 17 17 17;
+  --c-primary-dark: 0 0 0;
+  --c-on-primary: 255 255 255;
+  --c-secondary: 228 228 224;
+  --c-secondary-deep: 205 205 200;
+  --c-canvas: 236 236 233;
+  --c-line: 208 208 205;
+  --c-surface: 255 255 255;
+  --c-ink: 20 20 20;
+  color-scheme: light;
+}
+
+body {
+  @apply bg-canvas text-ink antialiased;
+}
+
+@layer utilities {
+  /* Existing pages hardcode `text-white` on `bg-accent` buttons. If the
+     restaurant picks a LIGHT primary color that becomes unreadable, so the
+     text color on accent surfaces always follows the computed contrast color. */
+  .bg-accent {
+    color: rgb(var(--c-on-primary)) !important;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Diagonal-striped bar used by the yearly revenue chart. */
+  .bar-stripes {
+    background-image: repeating-linear-gradient(
+      135deg,
+      rgb(var(--c-primary) / 0.28) 0 3px,
+      transparent 3px 7px
+    );
+    border: 1px solid rgb(var(--c-primary) / 0.18);
+  }
+}
