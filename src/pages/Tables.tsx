@@ -45,7 +45,9 @@ export function Tables() {
   useEffect(() => { void load(); }, [load]);
 
   const qrUrl = (table: RestaurantTable) => {
-    const url = new URL('https://shadyelsawy536.github.io/cafe-website/');
+    if (!restaurantSlug) throw new Error('Restaurant slug is not available yet.');
+    // Production tenant subdomain resolves the restaurant from its hostname.
+    const url = new URL(`https://${restaurantSlug}.hubdine.com/`);
     url.searchParams.set('restaurant', restaurantSlug);
     url.searchParams.set('table', table.qr_token);
     return url.toString();
@@ -118,7 +120,7 @@ export function Tables() {
       </div>
       <aside className="rounded-2xl border border-line bg-surface p-5 md:p-6">
         <h2 className="font-semibold text-ink">QR preview</h2>
-        {selected ? <div className="qr-print-card mt-4 rounded-2xl border p-5 text-center" style={{ borderColor: settings.qr_accent_color, backgroundColor: settings.qr_background_color, color: settings.qr_primary_color }}><p className="text-xs uppercase tracking-[0.18em]" style={{ color: settings.qr_accent_color }}>{restaurantSlug || 'HubDine'}</p><h3 className="mt-2 text-xl font-semibold">{settings.qr_title || 'Scan to order'}</h3><p className="mt-1 text-sm">{selected.display_name || `Table ${selected.table_number}`}</p><img className="mx-auto mt-4 w-full max-w-[240px]" src={qrImageUrl(selected)} alt={`QR code for table ${selected.table_number}`} /><p className="mt-3 text-xs">Scan the code to open this table's menu</p><div className="mt-4 flex flex-wrap justify-center gap-2 print:hidden"><button className="rounded-lg border px-3 py-2 text-xs" style={{ borderColor: settings.qr_accent_color }} onClick={() => window.open(qrUrl(selected), '_blank', 'noopener,noreferrer')}>Open link</button><button className="rounded-lg px-3 py-2 text-xs font-medium text-white" style={{ backgroundColor: settings.qr_primary_color }} onClick={() => window.print()}>Print QR</button></div></div> : <p className="mt-3 text-sm text-ink/50">Choose “QR / Print” on a table to preview its printable code.</p>}
+        {selected ? <div className={`qr-print-card mt-4 p-5 text-center ${settings.qr_design === "minimal" ? "rounded-lg border-0" : settings.qr_design === "premium" ? "rounded-3xl border-4 shadow-xl" : "rounded-2xl border-2"}`} style={{ borderColor: settings.qr_accent_color, backgroundColor: settings.qr_background_color, color: settings.qr_primary_color, outline: settings.qr_design === 'premium' ? `1px solid ${settings.qr_accent_color}` : undefined, outlineOffset: settings.qr_design === 'premium' ? '-7px' : undefined }}><p className="text-xs uppercase tracking-[0.18em]" style={{ color: settings.qr_accent_color }}>{restaurantSlug || 'HubDine'}</p><h3 className="mt-2 text-xl font-semibold">{settings.qr_title || 'Scan to order'}</h3><p className="mt-1 text-sm">{selected.display_name || `Table ${selected.table_number}`}</p><img className="mx-auto mt-4 w-full max-w-[240px]" src={qrImageUrl(selected)} alt={`QR code for table ${selected.table_number}`} /><p className="mt-3 text-xs">Scan the code to open this table's menu</p><div className="mt-4 flex flex-wrap justify-center gap-2 print:hidden"><button className="rounded-lg border px-3 py-2 text-xs" style={{ borderColor: settings.qr_accent_color }} onClick={() => window.open(qrUrl(selected), '_blank', 'noopener,noreferrer')}>Open link</button><button className="rounded-lg px-3 py-2 text-xs font-medium text-white" style={{ backgroundColor: settings.qr_primary_color }} onClick={() => window.print()}>Print QR</button></div></div> : <p className="mt-3 text-sm text-ink/50">Choose “QR / Print” on a table to preview its printable code.</p>}
         <p className="mt-4 text-xs leading-5 text-ink/50">QR design settings apply to every table. Each table keeps its own permanent token, so changing colors or layout does not change its identity.</p>
       </aside>
     </section>
