@@ -93,6 +93,9 @@ export function Reports() {
   const [trendView, setTrendView] = useState<'day' | 'week' | 'month'>('day');
   const [staffBranchId, setStaffBranchId] = useState<string | null>(null);
   const effectiveBranchId = isOwner ? (branchFilter === 'all' ? null : branchFilter) : staffBranchId;
+  const reportBranchLabel = isOwner
+    ? (branchFilter === 'all' ? 'All branches' : branches.find((branch) => branch.id === branchFilter)?.name ?? 'Selected branch')
+    : branches.find((branch) => branch.id === staffBranchId)?.name ?? 'Assigned branch';
 
   const [breakdownProduct, setBreakdownProduct] = useState<ProductSales | null>(null);
   const [breakdown, setBreakdown] = useState<ProductBreakdown | null>(null);
@@ -262,7 +265,7 @@ export function Reports() {
     const tableHeader = (...values: unknown[]): Cell[] => values.map(value => ({ value, style: 2 }));
     const sheets: Sheet[] = [
       { name: 'Summary', rows: [
-        heading('HUBDINE · SALES REPORT'), row('Start date', startDate), row('End date', endDate), [],
+        heading('HUBDINE · SALES REPORT'), row('Start date', startDate), row('End date', endDate), row('Branch', reportBranchLabel), [],
         heading('SUMMARY'), tableHeader('Metric', 'Value'),
         row('Total sales', Number(report.totals.total_sales)), row('Total orders', Number(report.totals.total_orders)),
         row('Average order value', Number(report.totals.avg_order_value)), row('Currency', currency),
@@ -305,7 +308,7 @@ ${sheets.map(sheet => `<Worksheet ss:Name="${esc(sheet.name)}"><Table>${sheet.ro
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `sales-report-${startDate}-to-${endDate}.xls`;
+    link.download = `sales-report-${reportBranchLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${startDate}-to-${endDate}.xls`;
     document.body.appendChild(link);
     link.click();
     link.remove();
