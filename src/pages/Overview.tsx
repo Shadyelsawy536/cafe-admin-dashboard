@@ -35,7 +35,7 @@ function periodBounds(now: Date, period: Period) {
   if (period === 'day') {
     start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     prevStart = new Date(start.getTime() - 86400000);
-    prevEnd = start;
+    prevEnd = new Date(prevStart.getTime() + (end.getTime() - start.getTime()));
   } else if (period === 'week') {
     start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
@@ -47,10 +47,6 @@ function periodBounds(now: Date, period: Period) {
     prevEnd = new Date(Math.min(prevStart.getTime() + (end.getTime() - start.getTime()), start.getTime()));
   }
   return { start, end, prevStart, prevEnd };
-}
-
-function periodLabel(period: Period) {
-  return period === 'day' ? 'today' : period === 'week' ? 'this week' : 'this month';
 }
 
 function comparisonLabel(period: Period) {
@@ -68,8 +64,7 @@ function makeFormatters(currency: string) {
   } catch {
     money = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
   }
-  const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
-  return { money: (n: number) => money.format(n), compact: (n: number) => compact.format(n) };
+  return { money: (n: number) => money.format(n) };
 }
 
 function csvCell(value: unknown): string {
@@ -88,7 +83,7 @@ export function Overview() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  const { money, compact } = useMemo(() => makeFormatters(currency), [currency]);
+  const { money } = useMemo(() => makeFormatters(currency), [currency]);
   const comparison = comparisonLabel(period);
 
   const load = useCallback(async () => {
@@ -103,11 +98,13 @@ export function Overview() {
         p_restaurant_id: id,
         p_start: start.toISOString(),
         p_end: end.toISOString(),
+        p_order_type: null,
       }),
       supabase.rpc('get_dashboard_overview', {
         p_restaurant_id: id,
         p_start: prevStart.toISOString(),
         p_end: prevEnd.toISOString(),
+        p_order_type: null,
       }),
       supabase.from('restaurant_settings').select('currency').eq('restaurant_id', id).maybeSingle(),
     ]);
@@ -461,37 +458,3 @@ function Delta({ value, tone, hide }: { value: number | null; tone: 'dark' | 'li
   );
 }
 
-function Gauge({ value }: { value: number }) {
-  const v = Math.max(0, Math.min(100, value));
-  const phi = Math.PI * (1 - v / 100);
-  const dx = 100 + 80 * Math.cos(phi);
-  const dy = 100 - 80 * Math.sin(phi);
-  const ticks = Array.from({ length: 21 }, (_, i) => {
-    const a = Math.PI * (1 - i / 20);
-    return {
-      x1: 100 + 90 * Math.cos(a),
-      y1: 100 - 90 * Math.sin(a),
-      x2: 100 + 96 * Math.cos(a),
-      y2: 100 - 96 * Math.sin(a),
-    };
-  });
-  return (
-    <svg viewBox="0 0 200 112" className="w-full" aria-hidden="true">
-      {ticks.map((tk, i) => (
-        <line key={i} {...tk} strokeWidth="1.5" style={{ stroke: 'rgb(var(--c-on-primary) / 0.35)' }} />
-      ))}
-      <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" strokeWidth="10" strokeLinecap="round" style={{ stroke: 'rgb(var(--c-on-primary) / 0.15)' }} />
-      <path
-        d="M 20 100 A 80 80 0 0 1 180 100"
-        fill="none"
-        strokeWidth="10"
-        strokeLinecap="round"
-        pathLength={100}
-        strokeDasharray={`${v} 100`}
-        style={{ stroke: 'rgb(var(--c-on-primary))' }}
-      />
-      <circle cx={dx} cy={dy} r="8" style={{ fill: 'rgb(var(--c-on-primary))' }} />
-      <circle cx={dx} cy={dy} r="3.5" style={{ fill: 'rgb(var(--c-primary))' }} />
-    </svg>
-  );
-}
