@@ -65,7 +65,7 @@ begin
     end if;
     select coalesce(max(case when o.discount_type='percentage' then round(v_line_total*(o.discount_value/100),2) else least(v_line_total,o.discount_value*v_quantity) end),0) into v_offer_best
     from public.offers o where o.restaurant_id=v_table.restaurant_id and o.is_active=true and (o.starts_at is null or o.starts_at<=now()) and (o.ends_at is null or o.ends_at>=now())
-      and (o.applies_to='all' or (o.applies_to='product' and o.product_id=v_product_id) or (o.applies_to='category' and o.category_id=(select p.category_id from public.products p where p.id=v_product_id));
+      and (o.applies_to='all' or (o.applies_to='product' and o.product_id=v_product_id) or (o.applies_to='category' and o.category_id=(select p.category_id from public.products p where p.id=v_product_id)));
     v_offer_discount:=least(v_line_total,greatest(0,coalesce(v_offer_best,0))); v_line_total:=greatest(0,v_line_total-v_offer_discount);
     update public.order_items set line_total=v_line_total where id=v_order_item_id; v_subtotal:=v_subtotal+v_line_total;
   end loop;
