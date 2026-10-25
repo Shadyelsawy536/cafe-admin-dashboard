@@ -9,6 +9,7 @@ interface RoleRow {
 interface StaffRow {
   id: string; // restaurant_users.id
   user_id: string;
+  branch_id: string | null;
   role_id: string;
   role_name: string;
   full_name: string | null;
@@ -21,6 +22,7 @@ interface PermissionRow {
 
 export function StaffPermissions() {
   const [roles, setRoles] = useState<RoleRow[]>([]);
+  const [branches, setBranches] = useState<{id:string;name:string;is_primary:boolean}[]>([]);
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [permissions, setPermissions] = useState<PermissionRow[]>([]);
   // roleId -> Set of permission keys currently granted to that role
@@ -39,6 +41,9 @@ export function StaffPermissions() {
 
   const load = useCallback(async () => {
     setLoading(true);
+
+    const { data: branchRows } = await supabase.from('restaurant_locations').select('id,name,is_primary').eq('restaurant_id', RESTAURANT_ID).eq('is_active', true).order('is_primary', { ascending: false }).order('name');
+    setBranches(branchRows ?? []);
 
     const { data: roleRows } = await supabase.from('roles').select('id, name').eq('restaurant_id', RESTAURANT_ID).order('name');
     setRoles(roleRows ?? []);
@@ -64,7 +69,7 @@ export function StaffPermissions() {
 
     const { data: staffRows } = await supabase
       .from('restaurant_users')
-      .select('id, user_id, role_id, roles(name)')
+      .select('id, user_id, role_id, branch_id, roles(name)')
       .eq('restaurant_id', RESTAURANT_ID);
 
     if (staffRows) {
@@ -79,6 +84,7 @@ export function StaffPermissions() {
         staffRows.map((s) => ({
           id: s.id,
           user_id: s.user_id,
+          branch_id: s.branch_id ?? null,
           role_id: s.role_id,
           role_name: (s.roles as unknown as { name: string } | null)?.name ?? '—',
           full_name: nameById.get(s.user_id) ?? null,
@@ -138,7 +144,14 @@ export function StaffPermissions() {
   }
 
   async function changeStaffRole(staffRow: StaffRow, newRoleId: string) {
-    await supabase.from('restaurant_users').update({ role_id: newRoleId }).eq('id', staffRow.id);
+    const { error } = await supabase.from('restaurant_users').update({ role_id: newRoleId }).eq('id', staffRow.id);
+    if (error) alert(`Could not change role: ${error.message}`);
+    load();
+  }
+
+  async function changeStaffBranch(staffRow: StaffRow, branchId: string) {
+    const { error } = await supabase.from('restaurant_users').update({ branch_id: branchId }).eq('id', staffRow.id);
+    if (error) alert(`Could not assign branch: ${error.message}`);
     load();
   }
 
@@ -316,6 +329,7 @@ export function StaffPermissions() {
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Role</th>
+                <th className="px-4 py-3 font-medium">Branch access</th>
                 <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
@@ -335,6 +349,9 @@ export function StaffPermissions() {
                         </option>
                       ))}
                     </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    {s.role_name.toLowerCase() === 'owner' ? <span className="text-xs font-medium text-ink/60">All branches (owner)</span> : <select value={s.branch_id ?? ''} onChange={(e) => changeStaffBranch(s, e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"><option value="" disabled>Select branch</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}{b.is_primary?' (Primary)':''}</option>)}</select>}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button onClick={() => removeStaff(s)} className="text-xs font-medium text-danger hover:underline">
