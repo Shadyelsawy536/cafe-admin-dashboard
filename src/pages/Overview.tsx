@@ -5,7 +5,7 @@ import { RESTAURANT_ID } from '../lib/tenant';
 import { useAuth } from '../contexts/AuthContext';
 import { Icon } from '../components/Icons';
 
-type OrderType = 'all' | 'delivery' | 'pickup';
+type Period = 'day' | 'week' | 'month';
 
 interface Totals {
   sales: number;
@@ -27,41 +27,38 @@ interface OverviewData {
   totals: Totals;
   daily: DailyPoint[];
 }
-interface MonthPoint {
-  month: number;
-  revenue: number;
-  orders: number;
+function periodBounds(now: Date, period: Period) {
+  const end = new Date(now.getTime() + 60000);
+  let start: Date;
+  let prevStart: Date;
+  let prevEnd: Date;
+  if (period === 'day') {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    prevStart = new Date(start.getTime() - 86400000);
+    prevEnd = start;
+  } else if (period === 'week') {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    prevStart = new Date(start.getTime() - 7 * 86400000);
+    prevEnd = new Date(Math.min(prevStart.getTime() + (end.getTime() - start.getTime()), start.getTime()));
+  } else {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    prevEnd = new Date(Math.min(prevStart.getTime() + (end.getTime() - start.getTime()), start.getTime()));
+  }
+  return { start, end, prevStart, prevEnd };
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function periodLabel(period: Period) {
+  return period === 'day' ? 'today' : period === 'week' ? 'this week' : 'this month';
+}
 
-function monthBounds(now: Date) {
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  // Compare against the SAME elapsed span of last month (fair month-to-date).
-  const elapsed = now.getTime() - start.getTime();
-  const prevEnd = new Date(Math.min(prevStart.getTime() + elapsed, start.getTime()));
-  const end = new Date(now.getTime() + 60000);
-  return { start, end, prevStart, prevEnd };
+function comparisonLabel(period: Period) {
+  return period === 'day' ? 'yesterday' : period === 'week' ? 'last week' : 'last month';
 }
 
 function pctDelta(cur: number, prev: number | undefined): number | null {
   return prev && prev > 0 ? ((cur - prev) / prev) * 100 : null;
-}
-
-// Share of all paid orders that ended up completed (cancellations count against it).
-function fulfilmentScore(t: Totals | undefined): number | null {
-  if (!t) return null;
-  const all = t.orders + t.cancelled;
-  return all > 0 ? Math.round((t.completed / all) * 100) : null;
-}
-
-function niceMax(v: number): number {
-  if (v <= 0) return 1;
-  const exp = Math.pow(10, Math.floor(Math.log10(v)));
-  const f = v / exp;
-  const nice = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10;
-  return nice * exp;
 }
 
 function makeFormatters(currency: string) {
@@ -83,20 +80,16 @@ export function Overview() {
   const { hasPermission } = useAuth();
   const canReports = hasPermission('reports.view');
   const now = useMemo(() => new Date(), []);
-  const thisYear = now.getFullYear();
-
-  const [orderType, setOrderType] = useState<OrderType>('all');
-  const [year, setYear] = useState(thisYear);
+  const [period, setPeriod] = useState<Period>('day');
   const [current, setCurrent] = useState<OverviewData | null>(null);
   const [previous, setPrevious] = useState<OverviewData | null>(null);
-  const [monthly, setMonthly] = useState<MonthPoint[]>([]);
   const [currency, setCurrency] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
   const { money, compact } = useMemo(() => makeFormatters(currency), [currency]);
-  const typeParam = orderType === 'all' ? null : orderType;
+  const comparison = comparisonLabel(period);
 
   const load = useCallback(async () => {
     const id = RESTAURANT_ID;
@@ -104,19 +97,17 @@ export function Overview() {
       setLoading(false);
       return;
     }
-    const { start, end, prevStart, prevEnd } = monthBounds(new Date());
+    const { start, end, prevStart, prevEnd } = periodBounds(new Date(), period);
     const [cur, prev, settings] = await Promise.all([
       supabase.rpc('get_dashboard_overview', {
         p_restaurant_id: id,
         p_start: start.toISOString(),
         p_end: end.toISOString(),
-        p_order_type: typeParam,
       }),
       supabase.rpc('get_dashboard_overview', {
         p_restaurant_id: id,
         p_start: prevStart.toISOString(),
         p_end: prevEnd.toISOString(),
-        p_order_type: typeParam,
       }),
       supabase.from('restaurant_settings').select('currency').eq('restaurant_id', id).maybeSingle(),
     ]);
@@ -130,27 +121,12 @@ export function Overview() {
     }
     if (settings.data?.currency) setCurrency(String(settings.data.currency));
     setLoading(false);
-  }, [typeParam, canReports]);
-
-  const loadMonthly = useCallback(async () => {
-    const id = RESTAURANT_ID;
-    if (!id || !canReports) return;
-    const { data, error: rpcError } = await supabase.rpc('get_monthly_revenue', {
-      p_restaurant_id: id,
-      p_year: year,
-      p_order_type: typeParam,
-    });
-    if (!rpcError && data) setMonthly(data as MonthPoint[]);
-  }, [year, typeParam, canReports]);
+  }, [period, canReports]);
 
   useEffect(() => {
     setLoading(true);
     void load();
   }, [load]);
-
-  useEffect(() => {
-    void loadMonthly();
-  }, [loadMonthly]);
 
   // Live: any order change refreshes the numbers (debounced so a burst of
   // updates triggers one reload, not many).
@@ -167,7 +143,6 @@ export function Overview() {
           clearTimeout(timer);
           timer = setTimeout(() => {
             void load();
-            void loadMonthly();
           }, 800);
         },
       )
@@ -176,13 +151,13 @@ export function Overview() {
       clearTimeout(timer);
       void supabase.removeChannel(channel);
     };
-  }, [canReports, load, loadMonthly]);
+  }, [canReports, load]);
 
   async function exportCsv() {
     const id = RESTAURANT_ID;
     if (!id) return;
     setExporting(true);
-    const { start, end } = monthBounds(new Date());
+    const { start, end } = periodBounds(new Date(), period);
     let query = supabase
       .from('orders')
       .select('id, created_at, customer_name, delivery_type, payment_method, status, payment_verified, total')
@@ -191,7 +166,6 @@ export function Overview() {
       .lt('created_at', end.toISOString())
       .order('created_at', { ascending: false })
       .limit(5000);
-    if (orderType !== 'all') query = query.eq('delivery_type', orderType);
     const { data } = await query;
 
     const header = ['Order ID', 'Date', 'Customer', 'Type', 'Payment', 'Status', 'Paid', 'Total'];
@@ -207,7 +181,7 @@ export function Overview() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `orders-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}.csv`;
+    a.download = `orders-${period}-${now.toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     setExporting(false);
@@ -229,13 +203,10 @@ export function Overview() {
   const val = (fn: () => string) => (ready ? fn() : '—');
 
   // Card 1 — weekly buckets for the decorative bars.
-  const weekly = [0, 0, 0, 0];
-  for (const d of daily) {
-    const dom = Number(d.day.slice(8, 10));
-    weekly[Math.min(3, Math.floor((dom - 1) / 7))] += Number(d.revenue);
-  }
+  const weekly = daily.slice(-4).map((d) => Number(d.revenue));
+  while (weekly.length < 4) weekly.unshift(0);
   const maxWeek = Math.max(...weekly, 1);
-  const currentWeek = Math.min(3, Math.floor((now.getDate() - 1) / 7));
+  const currentWeek = 3;
 
   // Card 2 — sparkline of daily revenue.
   const revenuePoints = daily.map((d) => Number(d.revenue));
@@ -255,21 +226,11 @@ export function Overview() {
   const orderBars = daily.slice(-14).map((d) => Number(d.orders));
   const maxOrders = Math.max(...orderBars, 1);
 
-  // Gauge.
-  const score = fulfilmentScore(t);
-  const prevScore = fulfilmentScore(p);
-  const scoreDiff = score !== null && prevScore !== null ? score - prevScore : null;
-
-  // Yearly chart.
-  const yearTotal = monthly.reduce((s, m) => s + Number(m.revenue), 0);
-  const yMax = niceMax(Math.max(...monthly.map((m) => Number(m.revenue)), 0));
-  const yTicks = [1, 0.75, 0.5, 0.25, 0].map((f) => yMax * f);
-  const activeMonths = monthly.filter((m) => Number(m.revenue) > 0);
-  const avg = activeMonths.length ? yearTotal / activeMonths.length : 0;
-  const peakMonth = monthly.reduce((best, m) => (Number(m.revenue) > best.revenue ? { month: m.month, revenue: Number(m.revenue) } : best), { month: 0, revenue: 0 }).month;
-  const highlight = year === thisYear ? now.getMonth() + 1 : peakMonth;
-
-  const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const statusTotal = Math.max(0, Number(t?.completed || 0) + Number(t?.pending || 0) + Number(t?.cancelled || 0));
+  const maxStatus = Math.max(Number(t?.completed || 0), Number(t?.pending || 0), Number(t?.cancelled || 0), 1);
+  const periodTitle = period === 'day' ? 'Today' : period === 'week' ? 'This week' : 'This month';
+  const periodTrend = daily.map((point) => ({ ...point, value: Number(point.revenue || 0) }));
+  const trendMax = Math.max(...periodTrend.map((point) => point.value), 1);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -295,20 +256,22 @@ export function Overview() {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-full bg-surface p-1 shadow-sm ring-1 ring-black/5">
-          {(['all', 'delivery', 'pickup'] as const).map((type) => (
+        <div className="inline-flex rounded-full bg-surface p-1 shadow-sm ring-1 ring-black/5" role="group" aria-label="Overview period">
+          {(['day', 'week', 'month'] as const).map((value) => (
             <button
-              key={type}
-              onClick={() => setOrderType(type)}
+              key={value}
+              type="button"
+              onClick={() => setPeriod(value)}
+              aria-pressed={period === value}
               className={`rounded-full px-4 py-1.5 text-sm font-medium capitalize transition-colors ${
-                orderType === type ? 'bg-accent' : 'text-ink/65 hover:text-ink'
+                period === value ? 'bg-accent' : 'text-ink/65 hover:text-ink'
               }`}
             >
-              {type === 'all' ? 'Overview' : type}
+              {value === 'day' ? 'Day' : value === 'week' ? 'Week' : 'Month'}
             </button>
           ))}
         </div>
-        <span className="text-sm text-ink/55">{monthLabel}, month to date</span>
+        <span className="text-sm text-ink/55">{periodTitle} · {period === 'day' ? now.toLocaleDateString() : period === 'week' ? 'Monday to today' : now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
       </div>
 
       {error && (
@@ -325,7 +288,7 @@ export function Overview() {
           </p>
           <div className="mt-3 flex items-center gap-2">
             <Delta value={ready ? pctDelta(t!.sales, p?.sales) : null} tone="dark" hide={!ready} />
-            <span className="text-xs text-on-accent/60">vs last month</span>
+            <span className="text-xs text-on-accent/60">vs {comparison}</span>
           </div>
           <Link to="/orders" className="mt-5 inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline">
             See orders <Icon name="arrow" className="h-3.5 w-3.5" />
@@ -349,7 +312,7 @@ export function Overview() {
           </p>
           <div className="mt-3 flex items-center gap-2">
             <Delta value={ready ? pctDelta(t!.net_revenue, p?.net_revenue) : null} tone="light" hide={!ready} />
-            <span className="text-xs text-ink/50">vs last month</span>
+            <span className="text-xs text-ink/50">vs {comparison}</span>
           </div>
           <Link to="/reports" className="mt-5 inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline">
             See analytics <Icon name="arrow" className="h-3.5 w-3.5" />
@@ -401,7 +364,7 @@ export function Overview() {
           </p>
           <div className="mt-3 flex items-center gap-2">
             <Delta value={ready ? pctDelta(t!.avg_order_value, p?.avg_order_value) : null} tone="light" hide={!ready} />
-            <span className="text-xs text-ink/55">vs last month</span>
+            <span className="text-xs text-ink/55">vs {comparison}</span>
           </div>
           <Link to="/customers" className="mt-5 inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline">
             See customers <Icon name="arrow" className="h-3.5 w-3.5" />
@@ -418,109 +381,62 @@ export function Overview() {
         </div>
       </div>
 
-      {/* Gauge + yearly revenue */}
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="rounded-3xl bg-accent p-5 sm:p-6 xl:col-span-5">
-          <p className="font-medium">Fulfilment score</p>
-          <p className="text-xs text-on-accent/60">Paid orders that were completed, cancellations counted against it</p>
-
-          <div className="relative mx-auto mt-4 w-full max-w-sm">
-            <Gauge value={score ?? 0} />
-            <div className="absolute inset-x-0 bottom-1 text-center">
-              <div className="flex items-center justify-center gap-2">
-                <span className="font-display text-5xl font-semibold tabular-nums">{ready && score !== null ? score : '—'}</span>
-                {scoreDiff !== null && (
-                  <span className="rounded-full bg-on-accent/15 px-2 py-0.5 text-xs font-semibold">
-                    {scoreDiff >= 0 ? '+' : ''}
-                    {scoreDiff}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-on-accent/60">of 100 points</p>
-            </div>
-          </div>
-
-          <p className="mt-4 font-medium">
-            {scoreDiff === null ? 'Not enough history yet' : scoreDiff >= 0 ? 'Ahead of last month' : 'Behind last month'}
-          </p>
-          <p className="text-xs text-on-accent/60">
-            {ready ? `${t!.completed} of ${t!.orders + t!.cancelled} orders completed · ${t!.cancelled} cancelled` : '—'}
-          </p>
-        </div>
-
-        <div className="rounded-3xl bg-surface p-5 ring-1 ring-black/5 sm:p-6 xl:col-span-7">
+      {/* Operational overview and revenue trend for the selected period */}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <section className="rounded-3xl bg-surface p-5 ring-1 ring-black/5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="font-medium">Revenue</p>
-              <p className="text-xs text-ink/50">{money(yearTotal)} for {year === thisYear ? 'this year' : year}</p>
+              <p className="font-medium">Order status</p>
+              <p className="text-xs text-ink/50">How orders are progressing {period === 'day' ? 'today' : period === 'week' ? 'this week' : 'this month'}</p>
             </div>
-            <div className="inline-flex rounded-full bg-canvas p-1">
-              {[thisYear - 1, thisYear].map((y) => (
-                <button
-                  key={y}
-                  onClick={() => setYear(y)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${year === y ? 'bg-accent' : 'text-ink/60'}`}
-                >
-                  {y}
-                </button>
-              ))}
-            </div>
+            <span className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-ink/60">{statusTotal.toLocaleString()} orders</span>
           </div>
-
-          <div className="mt-6 flex gap-3">
-            <div className="flex h-56 flex-col justify-between text-[11px] tabular-nums text-ink/40">
-              {yTicks.map((tick, i) => (
-                <span key={i}>{compact(tick)}</span>
-              ))}
-            </div>
-            <div className="relative flex-1">
-              <div className="absolute inset-0 flex flex-col justify-between" aria-hidden="true">
-                {yTicks.map((_, i) => (
-                  <div key={i} className="border-t border-dashed border-ink/10" />
-                ))}
-              </div>
-              {avg > 0 && (
-                <div
-                  className="absolute left-0 right-0 border-t border-dashed border-accent/60"
-                  style={{ bottom: `${(avg / yMax) * 100}%` }}
-                >
-                  <span className="absolute -top-5 right-0 text-[10px] text-ink/50">avg {compact(avg)}</span>
+          <div className="mt-6 space-y-5">
+            {([
+              { label: 'Completed', value: Number(t?.completed || 0), bar: 'bg-emerald-500' },
+              { label: 'Pending / in progress', value: Number(t?.pending || 0), bar: 'bg-amber-500' },
+              { label: 'Cancelled', value: Number(t?.cancelled || 0), bar: 'bg-red-500' },
+            ]).map((item) => (
+              <div key={item.label}>
+                <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                  <span className="font-medium text-ink/75">{item.label}</span>
+                  <span className="font-mono font-semibold tabular-nums text-ink">{ready ? item.value.toLocaleString() : '—'}{ready && statusTotal > 0 ? <span className="ml-2 text-xs font-normal text-ink/45">{Math.round(item.value / statusTotal * 100)}%</span> : null}</span>
                 </div>
-              )}
-              <div className="relative flex h-56 items-end gap-1.5 sm:gap-2.5">
-                {monthly.map((m) => {
-                  const rev = Number(m.revenue);
-                  const pct = (rev / yMax) * 100;
-                  const isHighlight = m.month === highlight && rev > 0;
-                  return (
-                    <div
-                      key={m.month}
-                      className="flex h-full flex-1 flex-col justify-end"
-                      title={`${MONTHS[m.month - 1]} ${year}: ${money(rev)} · ${m.orders} orders`}
-                    >
-                      {isHighlight && (
-                        <span className="mb-1 self-center rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold">
-                          {compact(rev)}
-                        </span>
-                      )}
-                      <div
-                        className={`w-full rounded-t-lg ${isHighlight ? 'bg-accent' : 'bar-stripes'}`}
-                        style={{ height: `${Math.max(pct, rev > 0 ? 3 : 1)}%` }}
-                      />
-                    </div>
-                  );
-                })}
+                <div className="h-3 overflow-hidden rounded-full bg-canvas">
+                  <div className={`h-full rounded-full ${item.bar} transition-all duration-500`} style={{ width: `${ready ? (item.value / maxStatus) * 100 : 0}%` }} />
+                </div>
               </div>
-            </div>
-          </div>
-          <div className="ml-10 mt-2 flex gap-1.5 sm:gap-2.5">
-            {MONTHS.map((m) => (
-              <span key={m} className="flex-1 text-center text-[10px] text-ink/45 sm:text-xs">
-                {m}
-              </span>
             ))}
           </div>
-        </div>
+          <Link to="/orders" className="mt-6 inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline">
+            Manage orders <Icon name="arrow" className="h-3.5 w-3.5" />
+          </Link>
+        </section>
+
+        <section className="rounded-3xl bg-surface p-5 ring-1 ring-black/5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">Revenue trend</p>
+              <p className="text-xs text-ink/50">Sales {period === 'day' ? 'by day' : period === 'week' ? 'by day this week' : 'by day this month'}</p>
+            </div>
+            <span className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-ink/60">{money(Number(t?.sales || 0))}</span>
+          </div>
+          {periodTrend.length === 0 ? (
+            <p className="py-12 text-center text-sm text-ink/45">No revenue data for this period.</p>
+          ) : (
+            <div className="mt-6 flex h-48 items-end gap-1.5 border-b border-line pb-2 sm:gap-2">
+              {periodTrend.map((point) => (
+                <div key={point.day} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2" title={`${point.day}: ${money(point.value)} · ${point.orders} orders`}>
+                  <div className="flex h-36 w-full items-end rounded-t-md bg-canvas">
+                    <div className="w-full rounded-t-md bg-accent transition-all" style={{ height: `${point.value > 0 ? Math.max(3, point.value / trendMax * 100) : 0}%` }} />
+                  </div>
+                  <span className="max-w-full truncate text-[10px] text-ink/45">{new Date(point.day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="mt-3 text-xs text-ink/40">Compared with {comparison}. Updated automatically when orders change.</p>
+        </section>
       </div>
     </div>
   );
