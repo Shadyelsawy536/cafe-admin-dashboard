@@ -23,7 +23,7 @@ interface OrderRow {
   table_number_snapshot: string | null;
   customer_name: string;
   customer_phone: string;
-  delivery_type: 'delivery' | 'pickup';
+  delivery_type: 'delivery' | 'pickup' | 'dine_in';
   delivery_address: string | null;
   pickup_branch: string | null;
   payment_method: 'cash' | 'visa';
