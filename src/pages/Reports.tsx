@@ -135,6 +135,16 @@ export function Reports() {
     const assignedBranchId = (membership as { branch_id?: string | null } | null)?.branch_id ?? null;
     setStaffBranchId(assignedBranchId);
     const selectedBranchId = isOwner ? (branchFilter === 'all' ? null : branchFilter) : assignedBranchId;
+    if (!isOwner && !selectedBranchId) {
+      setReport(null);
+      setAnalyticsOrders([]);
+      setTodayOrdersCount(0);
+      setPendingOrdersCount(0);
+      setPreviousSales(null);
+      setReportError('Your account is not assigned to a branch. Ask the restaurant owner to assign your branch access.');
+      setLoading(false);
+      return;
+    }
 
     const { data: settings } = await supabase
       .from('restaurant_settings')
