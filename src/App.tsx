@@ -17,6 +17,7 @@ const StaffPermissions = lazy(() => import('./pages/StaffPermissions').then((m) 
 const OffersCoupons = lazy(() => import('./pages/OffersCoupons').then((m) => ({ default: m.OffersCoupons })));
 const Customers = lazy(() => import('./pages/Customers').then((m) => ({ default: m.Customers })));
 const Payments = lazy(() => import('./pages/Payments').then((m) => ({ default: m.Payments })));
+const Tables = lazy(() => import('./pages/Tables').then((m) => ({ default: m.Tables })));
 
 function PageFallback() {
   return <div className="flex min-h-40 items-center justify-center p-8 text-sm text-ink/50">Loading page…</div>;
@@ -51,6 +52,7 @@ export default function App() {
     <Route element={<ProtectedShell />}>
     <Route path="/" element={page(<Overview />)} />
     <Route path="/orders" element={<RequirePermission permission="orders.view">{page(<Orders />)}</RequirePermission>} />
+    <Route path="/tables" element={<RequirePermission permission="settings.manage">{page(<Tables />)}</RequirePermission>} />
     <Route path="/products" element={<RequirePermission permission="menu.manage">{page(<Products />)}</RequirePermission>} />
     <Route path="/categories" element={<RequirePermission permission="menu.manage">{page(<Categories />)}</RequirePermission>} />
     <Route path="/modifier-groups" element={<RequirePermission permission="menu.manage">{page(<ModifierGroups />)}</RequirePermission>} />
