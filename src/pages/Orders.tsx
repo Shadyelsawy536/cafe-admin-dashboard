@@ -19,6 +19,8 @@ interface OrderItem {
 interface OrderRow {
   id: string;
   branch_id: string | null;
+  order_source: 'unknown' | 'website' | 'app' | 'qr_table';
+  table_number_snapshot: string | null;
   customer_name: string;
   customer_phone: string;
   delivery_type: 'delivery' | 'pickup';
@@ -69,7 +71,7 @@ export function Orders() {
     const { data, error } = await supabase
       .from('orders')
       .select(
-        `id, branch_id, customer_name, customer_phone, delivery_type, delivery_address, pickup_branch,
+        `id, branch_id, order_source, table_number_snapshot, customer_name, customer_phone, delivery_type, delivery_address, pickup_branch,
          payment_method, subtotal, tax, discount_amount, total, status, created_at,
          order_items(id, product_name, variant_label, unit_price, quantity, line_total,
            order_item_modifiers(modifier_name, price))`
@@ -208,7 +210,8 @@ export function Orders() {
                   <th className="px-4 py-3 font-medium">Order</th>
                   {branches.length > 1 && <th className="px-4 py-3 font-medium">Branch</th>}
                   <th className="px-4 py-3 font-medium">Customer</th>
-                  <th className="px-4 py-3 font-medium">Type</th>
+                  <th className="px-4 py-3 font-medium">Source</th>
+                  <th className="px-4 py-3 font-medium">Order type</th>
                   <th className="px-4 py-3 font-medium">Total</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Placed</th>
@@ -227,7 +230,8 @@ export function Orders() {
                     <td className="px-4 py-3 font-mono text-xs text-ink/70">#{order.id.slice(-6)}</td>
                     {branches.length > 1 && <td className="px-4 py-3 text-ink/70">{branches.find((b) => b.id === order.branch_id)?.name ?? '—'}</td>}
                     <td className="px-4 py-3">{order.customer_name}</td>
-                    <td className="px-4 py-3 capitalize text-ink/70">{order.delivery_type}</td>
+                    <td className="px-4 py-3"><span className="inline-flex rounded-full border border-line px-2 py-1 text-xs font-medium">{order.order_source === 'qr_table' ? 'QR Table' : order.order_source === 'app' ? 'App' : order.order_source === 'website' ? 'Website' : 'Unknown'}</span>{order.order_source === 'qr_table' && order.table_number_snapshot && <div className="mt-1 text-xs font-semibold text-ink/70">Table {order.table_number_snapshot}</div>}</td>
+                    <td className="px-4 py-3 capitalize text-ink/70">{order.delivery_type === 'dine_in' ? 'Dine In' : order.delivery_type}</td>
                     <td className="px-4 py-3 font-mono tabular-nums">{Number(order.total).toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={order.status} />
@@ -258,6 +262,8 @@ export function Orders() {
               {selected.delivery_type === 'delivery' ? selected.delivery_address : `Pickup at ${selected.pickup_branch}`}
             </p>
             <p className="text-ink/60 capitalize">Paying with {selected.payment_method}</p>
+            <p className="text-ink/60">Source: {selected.order_source === 'qr_table' ? 'QR Table' : selected.order_source === 'app' ? 'App' : selected.order_source === 'website' ? 'Website' : 'Unknown'}</p>
+            {selected.order_source === 'qr_table' && selected.table_number_snapshot && <p className="font-medium text-ink">Table {selected.table_number_snapshot}</p>}
           </div>
 
           <div className="mt-5 border-t border-line pt-4">
