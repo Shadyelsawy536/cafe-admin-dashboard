@@ -116,7 +116,7 @@ function showNewOrderNotification(onClick: () => void) {
   if (Notification.permission !== 'granted') return;
 
   const notification = new Notification('🔔 New order received', {
-    body: 'A new paid order is waiting in the dashboard.',
+    body: 'A new order is waiting in the dashboard.',
     tag: 'cafe-new-order',
     requireInteraction: true,
   });
@@ -157,26 +157,14 @@ export function Layout() {
     };
 
     const handleOrderInsert = async (payload: { new: unknown }) => {
-      const inserted = payload.new as { id?: string };
+      const inserted = payload.new as { id?: string; restaurant_id?: string };
 
-      if (!inserted.id) return;
+      // Realtime is already scoped to this tenant; verify the tenant again
+      // from the event payload and alert immediately for every newly-created
+      // order (including cash orders), without depending on the current page.
+      if (!inserted.id || inserted.restaurant_id !== RESTAURANT_ID) return;
 
-      // Read the row back instead of trusting the Realtime payload for the
-      // payment flag. This handles cases where the Realtime payload is
-      // incomplete while keeping unpaid Visa orders silent.
-      const { data: order } = await supabase
-        .from('orders')
-        .select('id, restaurant_id, payment_verified')
-        .eq('id', inserted.id)
-        .maybeSingle();
-
-      if (
-        order?.id &&
-        order.restaurant_id === RESTAURANT_ID &&
-        order.payment_verified === true
-      ) {
-        alertOrder(order.id);
-      }
+      alertOrder(inserted.id);
     };
 
     const handlePaymentUpdate = async (payload: { new: unknown }) => {
